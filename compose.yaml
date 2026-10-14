@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: sabun
+      POSTGRES_USER: sabun
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-sabun-local}
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sabun -d sabun"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: sabun
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-sabun-local}
+    ports: ["127.0.0.1:5672:5672", "127.0.0.1:15672:15672"]
+    volumes: ["rabbitmq_data:/var/lib/rabbitmq"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/sabun
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-sabun-local}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-sabun-local}
+      JAPANESE_FONT: /usr/share/fonts/opentype/ipafont-gothic/ipag.ttf
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    ports: ["127.0.0.1:8080:8080"]
+    volumes: ["pdf_data:/app/.data"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--max-time", "3", "http://localhost:8080/api/health"]
+      interval: 5s
+      timeout: 5s
+      start_period: 20s
+      retries: 12
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+  web:
+    build: .
+    ports: ["127.0.0.1:3000:80"]
+    depends_on:
+      api: { condition: service_healthy }
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  pdf_data:

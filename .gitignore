@@ -1,0 +1,12 @@
+node_modules/
+dist/
+target/
+.data/
+*.log
+.env
+.idea/
+.DS_Store
+tmp/
+playwright-report/
+test-results/
+*.tsbuildinfo

@@ -1,0 +1,149 @@
+# 差分 sabun
+
+A Japanese-first PDF comparison workspace built with **React + TypeScript + CSS**, **Spring Boot**, **Spring Security**, **Spring Data JPA**, **RabbitMQ**, and **PostgreSQL**.
+
+Drop two PDFs, compare text and appearance, then inspect highlighted changes against the original pages. Built for estimates, application forms, contracts, and dense business documents.
+
+## Run with Docker
+
+Requires Docker Desktop with Linux containers. From the repository root:
+
+```powershell
+docker compose up --build -d
+```
+
+Open **http://localhost:3000**. Click **サンプルPDFで試す** to submit two real Japanese estimates through RabbitMQ. Initial images and Maven dependencies may take several minutes to download.
+
+```powershell
+docker compose logs -f api
+docker compose stop
+```
+
+PostgreSQL, RabbitMQ, and PDF storage use persistent Docker volumes. Stopping containers preserves data. Files and completed job records expire after 24 hours.
+
+| Service | Local address |
+| --- | --- |
+| React / Nginx | http://localhost:3000 |
+| Spring Boot API | http://localhost:8080/api/session |
+| RabbitMQ management | http://localhost:15672 |
+| PostgreSQL | localhost:5432, database `sabun` |
+
+Development database and RabbitMQ credentials are `sabun` / `sabun-local`. These defaults are for local use. Ports bind only to loopback.
+
+## Develop locally
+
+Requires Node.js 22.12+ (Node 24 recommended), JDK 21+, Maven 3.9+, and Docker Desktop.
+
+```powershell
+docker compose up -d postgres rabbitmq
+npm ci
+```
+
+Run the backend in one terminal:
+
+```powershell
+cd backend
+mvn spring-boot:run
+```
+
+Run the frontend in another terminal, from the root:
+
+```powershell
+npm run dev
+```
+
+Open http://127.0.0.1:5173. Vite forwards `/api` to Spring Boot on port 8080. Use one hostname consistently; browser sessions for `localhost` and `127.0.0.1` are separate.
+
+For development without infrastructure:
+
+```powershell
+cd backend
+mvn spring-boot:run '-Dspring-boot.run.profiles=dev'
+```
+
+The **dev** profile explicitly uses file-backed H2 and a bounded, two-thread local dispatcher. The default profile uses PostgreSQL and RabbitMQ. It never silently falls back. Development data is separate from Docker volumes.
+
+The demo generator uses a Japanese TrueType font. Windows automatically uses `C:/Windows/Fonts/msgothic.ttc`; the runtime Docker image includes IPA Gothic. On another local OS, set `JAPANESE_FONT` to a Japanese `.ttf` or TrueType `.ttc`. This is only necessary for generating sample documents; uploaded PDFs use their embedded fonts when available.
+
+## Features
+
+- Two drag-and-drop zones, file picker, two-file drop, and original/revised swap.
+- File header validation, 25 MB per document, at most 60 pages per document, and page dimension limits.
+- Japanese Unicode extraction and position-based highlights using Apache PDFBox.
+- Text, appearance, and combined comparison modes.
+- Optional whitespace ignoring and opt-in Unicode NFKC normalization for full/half-width forms.
+- Table-like text runs split at large character gaps to keep changes near their field.
+- Visual detection for stamps, graphics, rules, scans, and moved text.
+- Durable database job records, RabbitMQ workers, progress polling, and idempotent atomic job claims.
+- Side-by-side and opacity-controlled overlay views, zoom, page selection, and a filterable change list.
+- UTF-8 BOM CSV reports, with spreadsheet formula escaping.
+- Session-private history, manual deletion, and 24-hour expiry of completed/failed records and their files.
+- Spring Security CSRF protection, HttpOnly session cookies, ownership checks on every document endpoint, and same-origin frontend/API access.
+- Japanese sample documents, loading/error/empty states, keyboard-accessible controls, responsive layouts, and reduced-motion support.
+
+## How comparison works
+
+1. The API validates both documents and stores them in a UUID-named directory, then persists a `QUEUED` job.
+2. A database-backed dispatch loop publishes pending job IDs to durable `sabun.compare`. Jobs not claimed after 60 seconds are republished, covering publish failures and missed deliveries.
+3. Two RabbitMQ consumers, each with prefetch 1, atomically claim a job. Duplicate messages cannot run the same queued job twice.
+4. PDFBox extracts positioned text spans and renders previews at 108 DPI. A Myers sequence diff detects changed/added/deleted text runs. Matching text moved more than a small positional tolerance is an appearance change.
+5. For appearance changes, the engine samples rendered pixels, thresholds color differences, and groups adjacent changed tiles into regions. Combined mode masks text areas to avoid duplicate text/pixel highlights.
+6. Results and normalized coordinates are stored in PostgreSQL. The browser draws highlights over page PNGs without uploading documents to an external comparison service.
+
+The fixed consumer count and prefetch bound concurrent PDF work; queued work stays in the database/broker. Three jobs per workspace may be active simultaneously. A worker interrupted for more than 15 minutes is marked failed rather than running indefinitely.
+
+## Accuracy and deployment boundaries
+
+- **OCR is not included.** Scanned documents can be visually compared; their words do not become searchable text changes.
+- Pages are paired by **page number**. Mid-document insertions, page reordering, skew, and scan registration are not automatically aligned.
+- Text extraction depends on the PDF's Unicode mappings. Vertical writing, unusual fonts, and ambiguous reading order can produce imperfect text grouping. Inspect appearance mode for these documents.
+- Visual comparison uses sampled pixels and tiles. It is a review aid, not a guarantee that every sub-pixel mark will be found. Different renderings/scanner noise may produce extra differences.
+- The application provides **guest workspaces scoped to an HttpSession**, not named user accounts. Closing/expiring the session or restarting this API can make previous history inaccessible. Files still expire by retention policy. Spring Security protects requests and ownership; it does not turn guest sessions into account authentication.
+- This is a runnable local MVP. Internet deployment needs HTTPS, real secrets, authenticated accounts if required, perimeter upload/rate limits and capacity admission, monitoring, and a reviewed retention policy.
+- API and workers currently run together in one Spring Boot service and use local PDF storage. Multiple replicas require shared file storage and shared sessions/sticky sessions; the per-session submission cap is not a distributed quota. Do not scale replicas without those changes.
+- Uploaded documents may be hostile. The worker has page/file/dimension limits but is not a per-job OS sandbox. For untrusted public uploads, isolate rendering workers and enforce resource/time quotas at the process/container boundary.
+
+### Configuration
+
+| Environment variable | Default / purpose |
+| --- | --- |
+| `DATABASE_URL` | `jdbc:postgresql://localhost:5432/sabun` |
+| `DATABASE_USER` | `sabun` |
+| `DATABASE_PASSWORD` | Local-only development password |
+| `RABBITMQ_HOST` / `RABBITMQ_PORT` | `localhost` / `5672` |
+| `RABBITMQ_USER` / `RABBITMQ_PASSWORD` | Local development credentials |
+| `QUEUE_ENABLED` | `true`; disabled explicitly in dev profile |
+| `STORAGE_PATH` | `.data/files` relative to the API working directory |
+| `JAPANESE_FONT` | Optional font path for sample generation |
+| `COOKIE_SECURE` | `false` for local HTTP; use `true` behind HTTPS |
+
+Other limits are in `backend/src/main/resources/application.yml`.
+
+## Validation
+
+```powershell
+npm test
+npm run build
+cd backend
+mvn test
+```
+
+Run the real PostgreSQL/RabbitMQ smoke test with the default API running:
+
+```powershell
+node scripts/smoke.mjs
+```
+
+The smoke test creates sample documents, waits for real queued processing, verifies Japanese amount/phrase changes, checks PNG/CSV responses, and tests CSRF, cross-session isolation, and invalid uploads. Its sample data remains until automatic expiry for inspection.
+
+Backend tests cover unchanged documents, numeric changes and coordinates, scanned/graphic changes, mixed mode, page addition, text removal, Japanese normalization, encrypted PDFs, limits, safe CSV cells, CSRF, ownership, and duplicate claims. API unit integration tests use an isolated in-memory H2 database; the smoke test verifies the real PostgreSQL/RabbitMQ stack.
+
+## Repository map
+
+```text
+src/                  React UI, API client, types, CSS, upload tests
+backend/src/main/     Spring Boot API, comparison engine, queue, persistence
+backend/src/test/     Engine and API/security regression tests
+scripts/smoke.mjs     Real-stack end-to-end API check
+compose.yaml          PostgreSQL, RabbitMQ, Spring Boot, React/Nginx
+```

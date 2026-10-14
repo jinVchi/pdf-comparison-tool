@@ -1,0 +1,46 @@
+server:
+  port: 8080
+  servlet:
+    session:
+      timeout: 8h
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${COOKIE_SECURE:false}
+  error:
+    include-message: never
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/sabun}
+    username: ${DATABASE_USER:sabun}
+    password: ${DATABASE_PASSWORD:sabun-local}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 52MB
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:sabun}
+    password: ${RABBITMQ_PASSWORD:sabun-local}
+    publisher-confirm-type: correlated
+    listener:
+      simple:
+        concurrency: 2
+        max-concurrency: 2
+        prefetch: 1
+        default-requeue-rejected: false
+app:
+  storage: ${STORAGE_PATH:.data/files}
+  queue: ${QUEUE_ENABLED:true}
+  japanese-font: ${JAPANESE_FONT:}
+  max-pages: 60
+  retention-hours: 24
+  max-active-jobs: 3
+logging:
+  level:
+    org.apache.pdfbox: ERROR

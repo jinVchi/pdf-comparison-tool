@@ -1,0 +1,11 @@
+spring:
+  datasource:
+    url: jdbc:h2:file:./.data/sabun;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+app:
+  queue: false
