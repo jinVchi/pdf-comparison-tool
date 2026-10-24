@@ -8,7 +8,8 @@ import java.util.UUID;
 class ComparisonJob {
     @Id
     UUID id;
-    @Column(nullable = false)
+    // Ownership is transferred only through transferGuest. Detached worker saves must not revert it.
+    @Column(nullable = false, updatable = false)
     String ownerId;
     @Enumerated(EnumType.STRING)
     Status status;

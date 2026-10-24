@@ -13,6 +13,11 @@ interface JobRepository extends JpaRepository<ComparisonJob, UUID> {
 
     long countByOwnerIdAndStatusIn(String ownerId, Collection<ComparisonJob.Status> statuses);
 
+    @Modifying
+    @Transactional
+    @Query(value = "update comparison_job set owner_id = :account where owner_id = :guest", nativeQuery = true)
+    int transferGuest(@Param("guest") String guest, @Param("account") String account);
+
     @Query("select j from ComparisonJob j where j.status = 'QUEUED' and (j.dispatchedAt is null or j.dispatchedAt < :cutoff) order by j.createdAt")
     List<ComparisonJob> pending(@Param("cutoff") Instant cutoff, org.springframework.data.domain.Pageable page);
 

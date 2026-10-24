@@ -77,7 +77,8 @@ The demo generator uses a Japanese TrueType font. Windows automatically uses `C:
 - Durable database job records, RabbitMQ workers, progress polling, and idempotent atomic job claims.
 - Side-by-side and opacity-controlled overlay views, zoom, page selection, and a filterable change list.
 - UTF-8 BOM CSV reports, with spreadsheet formula escaping.
-- Session-private history, manual deletion, and 24-hour expiry of completed/failed records and their files.
+- Email/password registration, sign-in/sign-out, account-private history across browsers, and optional guest workspaces.
+- Guest history moves into the account on registration or sign-in; manual deletion and 24-hour expiry still apply.
 - Spring Security CSRF protection, HttpOnly session cookies, ownership checks on every document endpoint, and same-origin frontend/API access.
 - Japanese sample documents, loading/error/empty states, keyboard-accessible controls, responsive layouts, and reduced-motion support.
 
@@ -98,8 +99,10 @@ The fixed consumer count and prefetch bound concurrent PDF work; queued work sta
 - Pages are paired by **page number**. Mid-document insertions, page reordering, skew, and scan registration are not automatically aligned.
 - Text extraction depends on the PDF's Unicode mappings. Vertical writing, unusual fonts, and ambiguous reading order can produce imperfect text grouping. Inspect appearance mode for these documents.
 - Visual comparison uses sampled pixels and tiles. It is a review aid, not a guarantee that every sub-pixel mark will be found. Different renderings/scanner noise may produce extra differences.
-- The application provides **guest workspaces scoped to an HttpSession**, not named user accounts. Closing/expiring the session or restarting this API can make previous history inaccessible. Files still expire by retention policy. Spring Security protects requests and ownership; it does not turn guest sessions into account authentication.
-- This is a runnable local MVP. Internet deployment needs HTTPS, real secrets, authenticated accounts if required, perimeter upload/rate limits and capacity admission, monitoring, and a reviewed retention policy.
+- Accounts are persisted in PostgreSQL (file-backed H2 in dev). Sessions expire after eight hours or an API restart; signing in again restores the account's unexpired history. Guest history is scoped to an HttpSession and becomes inaccessible when that session expires. Registration/sign-in transfers only the current guest workspace into the account. Sign-out invalidates the session and returns to a fresh guest workspace.
+- Passwords use BCrypt (cost 12), require at least 12 characters, and are limited to 72 UTF-8 bytes. Email addresses are trimmed and case-normalized, with a database uniqueness constraint. Session IDs and CSRF tokens rotate at sign-in/registration; every auth mutation requires CSRF. No passwords or bearer tokens are stored in browser storage. Email verification and password recovery are not included.
+- Authentication has bounded, in-memory per-remote-address limits: 5 registration attempts and 20 sign-in attempts per 15 minutes. Limits reset on API restart and are not distributed. Behind the bundled Nginx proxy, clients share the proxy's address and quota; add client-aware perimeter limits for public deployment.
+- This is a runnable local MVP. Internet deployment needs HTTPS (`COOKIE_SECURE=true`), real secrets, perimeter upload/auth rate limits and capacity admission, monitoring, and a reviewed retention policy.
 - API and workers currently run together in one Spring Boot service and use local PDF storage. Multiple replicas require shared file storage and shared sessions/sticky sessions; the per-session submission cap is not a distributed quota. Do not scale replicas without those changes.
 - Uploaded documents may be hostile. The worker has page/file/dimension limits but is not a per-job OS sandbox. For untrusted public uploads, isolate rendering workers and enforce resource/time quotas at the process/container boundary.
 
@@ -132,11 +135,14 @@ Run the real PostgreSQL/RabbitMQ smoke test with the default API running:
 
 ```powershell
 node scripts/smoke.mjs
+node scripts/auth-smoke.mjs
 ```
 
 The smoke test creates sample documents, waits for real queued processing, verifies Japanese amount/phrase changes, checks PNG/CSV responses, and tests CSRF, cross-session isolation, and invalid uploads. Its sample data remains until automatic expiry for inspection.
 
-Backend tests cover unchanged documents, numeric changes and coordinates, scanned/graphic changes, mixed mode, page addition, text removal, Japanese normalization, encrypted PDFs, limits, safe CSV cells, CSRF, ownership, and duplicate claims. API unit integration tests use an isolated in-memory H2 database; the smoke test verifies the real PostgreSQL/RabbitMQ stack.
+The auth smoke test creates two synthetic `@example.com` accounts, tests authentication and account isolation against the real stack, and deletes its sample comparison. The synthetic accounts remain in the local database.
+
+Backend tests cover unchanged documents, numeric changes and coordinates, scanned/graphic changes, mixed mode, page addition, text removal, Japanese normalization, encrypted PDFs, limits, safe CSV cells, CSRF, ownership, duplicate claims, account registration/sign-in/sign-out, guest-history transfer, session/CSRF rotation, and account isolation. API integration tests use an isolated in-memory H2 database; the smoke test verifies the real PostgreSQL/RabbitMQ stack.
 
 ## Repository map
 

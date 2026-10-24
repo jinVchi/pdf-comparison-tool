@@ -19,6 +19,8 @@ import {
     Layers,
     LoaderCircle,
     LockKeyhole,
+    LogIn,
+    LogOut,
     Maximize2,
     Minus,
     Plus,
@@ -36,9 +38,13 @@ import {
     dateLabel,
     fileSize,
     initialize,
+    signOut,
     submit,
     validatePdf,
 } from "./api";
+import type { Account } from "./api";
+import AuthForm from "./AuthForm";
+import type { AuthMode } from "./AuthForm";
 import type { Change, Job, Kind, Mode } from "./types";
 import { kindLabels, modeLabels, statusLabels } from "./types";
 
@@ -61,10 +67,15 @@ function App() {
     const [error, setError] = useState("");
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<Job | null>(null);
+    const [user, setUser] = useState<Account | null>(null);
+    const [authMode, setAuthMode] = useState<AuthMode | null>(null);
+    const [authBusy, setAuthBusy] = useState(false);
+    const [signingOut, setSigningOut] = useState(false);
 
     const connect = useCallback(async () => {
         try {
-            await initialize();
+            const session = await initialize();
+            setUser(session.user);
             setConnected(true);
             setJobs(await api<Job[]>("/comparisons"));
             setError("");
@@ -76,6 +87,17 @@ function App() {
     useEffect(() => {
         void connect();
     }, [connect]);
+    useEffect(() => {
+        if (!connected) return;
+        // Another tab may have signed out or switched accounts while this tab was hidden.
+        function refreshIdentity() {
+            void initialize().then((session) => {
+                if (session.user?.id !== user?.id) window.location.reload();
+            }).catch(() => { /* The next API action shows connection errors. */ });
+        }
+        window.addEventListener("focus", refreshIdentity);
+        return () => window.removeEventListener("focus", refreshIdentity);
+    }, [connected, user?.id]);
     useEffect(() => {
         if (!connected || (!jobs.some(active) && (!job || !active(job))))
             return;
@@ -185,6 +207,22 @@ function App() {
                 .catch((e) => setError(e.message));
     }
 
+    async function logout() {
+        setSigningOut(true);
+        setJob(null);
+        setJobs([]);
+        setDeleteTarget(null);
+        setFiles([null, null]);
+        try {
+            await signOut();
+            window.location.reload();
+        } catch (e) {
+            await connect();
+            setError((e as Error).message);
+            setSigningOut(false);
+        }
+    }
+
     return (
         <div className="app-shell">
             <aside className="sidebar">
@@ -261,10 +299,10 @@ function App() {
                         比較の設定
                     </button>
                     <div className="workspace-user">
-                        <span className="avatar">W</span>
+                        <span className="avatar">{user ? user.email[0].toUpperCase() : "G"}</span>
                         <div>
-                            <strong>マイワークスペース</strong>
-                            <span>セッション内のファイルを管理</span>
+                            <strong title={user?.email}>{user?.email ?? "ゲストワークスペース"}</strong>
+                            <span>{user ? "アカウントの比較履歴" : "セッション内のファイルを管理"}</span>
                         </div>
                         <LockKeyhole size={14} />
                     </div>
@@ -294,6 +332,20 @@ function App() {
                             {connected ? "接続済み" : "未接続"}
                         </span>
                         <span className="header-divider" />
+                        {user ? (
+                            <button className="help-button" disabled={signingOut || loading} onClick={() => void logout()}>
+                                <LogOut size={15} /> ログアウト
+                            </button>
+                        ) : (
+                            <div className="auth-actions">
+                                <button className="help-button" disabled={!connected || loading} onClick={() => setAuthMode("sign-in")}>
+                                    <LogIn size={15} /> ログイン
+                                </button>
+                                <button className="auth-register" disabled={!connected || loading} onClick={() => setAuthMode("sign-up")}>
+                                    新規登録
+                                </button>
+                            </div>
+                        )}
                         <button
                             className="help-button"
                             onClick={() => navigate("help")}
@@ -471,7 +523,7 @@ function App() {
                                 <div className="start-row">
                                     <p>
                                         <ShieldCheck size={16} />
-                                        このセッションのファイルだけを表示します
+                                        {user ? "このアカウントのファイルだけを表示します" : "このセッションのファイルだけを表示します"}
                                     </p>
                                     <button
                                         className="primary-button"
@@ -719,7 +771,7 @@ function App() {
                                     </div>
                                     <h1>比較履歴</h1>
                                     <p>
-                                        このセッションで比較した書類を、もう一度確認できます。
+                                        {user ? "このアカウントで比較した書類を、もう一度確認できます。" : "このセッションで比較した書類を、もう一度確認できます。"}
                                     </p>
                                 </div>
                                 <button
@@ -775,6 +827,13 @@ function App() {
                     )}
                 </main>
             </div>
+            {authMode && (
+                <Modal title={authMode === "sign-up" ? "アカウントを作成" : "ログイン"}
+                    close={() => { if (!authBusy) setAuthMode(null); }}>
+                    <AuthForm mode={authMode} changeMode={setAuthMode} busy={authBusy} setBusy={setAuthBusy} />
+                </Modal>
+            )}
+            {signingOut && <div className="modal-backdrop" role="status"><div className="modal">ログアウト中…</div></div>}
             {settingsOpen && (
                 <Modal
                     title="比較の設定とヒント"
@@ -1625,7 +1684,7 @@ function Help({ start, demo }: { start: () => void; demo: () => void }) {
                     </dd>
                     <dt>ファイルはいつ削除されますか？</dt>
                     <dd>
-                        完了・エラーになった比較データは作成から24時間後に自動削除されます。履歴から手動で削除することもできます。履歴は現在のブラウザーセッションに紐づいています。
+                        完了・エラーになった比較データは作成から24時間後に自動削除されます。履歴から手動で削除することもできます。ログインすると履歴はアカウントに保存され、別のブラウザーからも確認できます。ゲストの履歴は現在のブラウザーセッションに紐づき、登録・ログイン時にアカウントへ引き継がれます。
                     </dd>
                 </dl>
                 <div className="help-actions">
@@ -1662,7 +1721,7 @@ function Modal({
             if (e.key === "Escape") onClose.current();
             if (e.key === "Tab") {
                 const items = ref.current?.querySelectorAll<HTMLElement>(
-                    'button, a, input, select, [tabindex="0"]',
+                    'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), [tabindex="0"]',
                 );
                 if (!items?.length) return;
                 const first = items[0],

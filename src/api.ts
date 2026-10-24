@@ -1,8 +1,15 @@
 import type { Job, Mode } from "./types";
-let csrf: { csrfToken: string; csrfHeader: string } | undefined;
-let initializing: Promise<void> | null = null;
+export type Account = { id: string; email: string };
+export type Session = {
+    csrfToken: string;
+    csrfHeader: string;
+    retentionHours: number;
+    user: Account | null;
+};
+let csrf: Session | undefined;
+let initializing: Promise<Session> | null = null;
 
-export function initialize(): Promise<void> {
+export function initialize(): Promise<Session> {
     if (initializing) return initializing;
     initializing = (async () => {
         let res: Response;
@@ -23,11 +30,31 @@ export function initialize(): Promise<void> {
             throw new Error(
                 "サーバーに接続できません。接続状況を確認して、再接続してください。",
             );
-        csrf = await res.json();
+        const session: Session = await res.json();
+        csrf = session;
+        return session;
     })().finally(() => {
         initializing = null;
     });
     return initializing;
+}
+
+export async function authenticate(mode: "sign-in" | "sign-up", email: string, password: string) {
+    const account = await api<Account>(`/auth/${mode}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+    });
+    // Authentication rotates the session ID and invalidates its old CSRF token.
+    if (initializing) await initializing.catch(() => {});
+    csrf = undefined;
+    return account;
+}
+
+export async function signOut() {
+    await api<void>("/auth/sign-out", { method: "POST" });
+    if (initializing) await initializing.catch(() => {});
+    csrf = undefined;
 }
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (!csrf) await initialize();

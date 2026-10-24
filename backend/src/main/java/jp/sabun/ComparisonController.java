@@ -43,15 +43,16 @@ class ComparisonController {
     @GetMapping("/session")
     Map<String, Object> session(HttpSession session, CsrfToken token) {
         owner(session);
-        return Map.of("csrfToken", token.getToken(), "csrfHeader", token.getHeaderName(), "retentionHours", 24);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("csrfToken", token.getToken());
+        result.put("csrfHeader", token.getHeaderName());
+        result.put("retentionHours", 24);
+        result.put("user", WorkspaceIdentity.account());
+        return result;
     }
 
     private String owner(HttpSession session) {
-        synchronized (session) {
-            if (session.getAttribute("workspace") == null)
-                session.setAttribute("workspace", UUID.randomUUID().toString());
-            return (String) session.getAttribute("workspace");
-        }
+        return WorkspaceIdentity.owner(session);
     }
 
     @GetMapping("/comparisons")

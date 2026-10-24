@@ -3,12 +3,18 @@ package jp.sabun;
 import java.io.IOException;
 import java.util.Map;
 import org.springframework.http.*;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
 class ApiErrors {
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    ResponseEntity<?> malformed() {
+        return ResponseEntity.badRequest().body(Map.of("message", "入力内容を確認してください。"));
+    }
+
     @ExceptionHandler(ResponseStatusException.class)
     ResponseEntity<?> status(ResponseStatusException e) {
         return ResponseEntity.status(e.getStatusCode())

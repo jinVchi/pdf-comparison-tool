@@ -270,9 +270,73 @@ input[type="range"] {
     background: #e1ebd00c;
 }
 .workspace-user strong {
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 10px;
     font-weight: 500;
     display: block;
+}
+.auth-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.auth-register {
+    background: var(--green);
+    color: white;
+    padding: 7px 12px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+.auth-form {
+    display: grid;
+    gap: 16px;
+}
+.auth-form > p, .auth-form small {
+    color: #66776e;
+    font-size: 12px;
+}
+.auth-form fieldset {
+    display: grid;
+    gap: 8px;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    min-width: 0;
+}
+.auth-form label {
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 6px;
+}
+.auth-form input {
+    min-width: 0;
+    width: 100%;
+    background: #fbfcfa;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    color: var(--dark);
+}
+.auth-error {
+    color: #993e32;
+    background: #fff3f0;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 12px;
+}
+.auth-switch {
+    color: var(--green);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    font-size: 12px;
+}
+@media (max-width: 600px) {
+    .auth-actions { gap: 6px; }
+    .header-right > .help-button:last-child { display: none; }
+    .auth-register { padding: 6px 8px; }
 }
 .workspace-user div > span {
     display: block;
