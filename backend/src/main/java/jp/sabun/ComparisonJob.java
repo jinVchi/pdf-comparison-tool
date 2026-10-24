@@ -6,9 +6,12 @@ import java.util.UUID;
 
 @Entity
 class ComparisonJob {
-    @Id UUID id;
-    @Column(nullable=false) String ownerId;
-    @Enumerated(EnumType.STRING) Status status;
+    @Id
+    UUID id;
+    @Column(nullable = false)
+    String ownerId;
+    @Enumerated(EnumType.STRING)
+    Status status;
     String originalName;
     String revisedName;
     long originalSize;
@@ -23,6 +26,10 @@ class ComparisonJob {
     Instant updatedAt;
     Instant dispatchedAt;
     String errorMessage;
-    @Column(columnDefinition="text") String resultJson;
-    enum Status { QUEUED, PROCESSING, COMPLETED, FAILED }
+    @Column(columnDefinition = "text")
+    String resultJson;
+
+    enum Status {
+        QUEUED, PROCESSING, COMPLETED, FAILED
+    }
 }
