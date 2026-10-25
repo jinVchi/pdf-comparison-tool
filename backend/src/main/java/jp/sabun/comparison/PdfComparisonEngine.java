@@ -1,4 +1,4 @@
-package jp.sabun;
+package jp.sabun.comparison;
 
 import com.github.difflib.DiffUtils;
 import com.github.difflib.patch.AbstractDelta;
@@ -17,7 +17,7 @@ import java.nio.file.Path;
 import java.text.Normalizer;
 import java.util.*;
 import java.util.function.IntConsumer;
-import static jp.sabun.ComparisonResult.*;
+import static jp.sabun.comparison.ComparisonResult.*;
 
 @Component
 class PdfComparisonEngine {

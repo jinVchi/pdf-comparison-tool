@@ -1,5 +1,6 @@
-package jp.sabun;
+package jp.sabun.auth;
 
+import jp.sabun.comparison.JobRepository;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Locale;

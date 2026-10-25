@@ -1,5 +1,6 @@
-package jp.sabun;
+package jp.sabun.comparison;
 
+import jp.sabun.storage.FileStorage;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;

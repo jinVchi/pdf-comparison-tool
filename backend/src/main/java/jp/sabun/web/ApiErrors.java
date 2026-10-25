@@ -1,4 +1,4 @@
-package jp.sabun;
+package jp.sabun.web;
 
 import java.io.IOException;
 import java.util.Map;

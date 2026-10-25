@@ -1,5 +1,6 @@
-package jp.sabun;
+package jp.sabun.comparison;
 
+import jp.sabun.storage.FileStorage;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 import java.time.Instant;

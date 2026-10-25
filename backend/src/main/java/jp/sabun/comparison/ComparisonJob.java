@@ -1,11 +1,11 @@
-package jp.sabun;
+package jp.sabun.comparison;
 
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-class ComparisonJob {
+public class ComparisonJob {
     @Id
     UUID id;
     // Ownership is transferred only through transferGuest. Detached worker saves must not revert it.

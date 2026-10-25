@@ -1,4 +1,4 @@
-package jp.sabun;
+package jp.sabun.comparison;
 
 import java.time.Instant;
 import java.util.*;
@@ -6,7 +6,7 @@ import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
-interface JobRepository extends JpaRepository<ComparisonJob, UUID> {
+public interface JobRepository extends JpaRepository<ComparisonJob, UUID> {
     List<ComparisonJob> findTop30ByOwnerIdOrderByCreatedAtDesc(String ownerId);
 
     Optional<ComparisonJob> findByIdAndOwnerId(UUID id, String ownerId);

@@ -1,4 +1,4 @@
-package jp.sabun;
+package jp.sabun.comparison;
 
 import org.apache.pdfbox.pdmodel.*;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;

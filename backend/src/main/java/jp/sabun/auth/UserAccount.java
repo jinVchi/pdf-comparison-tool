@@ -1,4 +1,4 @@
-package jp.sabun;
+package jp.sabun.auth;
 
 import jakarta.persistence.*;
 import java.time.Instant;

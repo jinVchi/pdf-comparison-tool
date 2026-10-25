@@ -149,8 +149,19 @@ Backend tests cover unchanged documents, numeric changes and coordinates, scanne
 
 ```text
 src/                  React UI, API client, types, CSS, upload tests
-backend/src/main/     Spring Boot API, comparison engine, queue, persistence
-backend/src/test/     Engine and API/security regression tests
+backend/src/main/java/jp/sabun/
+  SabunApplication.java  Spring Boot entry point; scans all feature packages
+  auth/                 Registration, sign-in/out, sessions, account identity and persistence
+  comparison/           Comparison API, PDF engine, jobs, dispatchers and retention
+  config/               Spring Security and RabbitMQ queue configuration
+  storage/              Local PDF, result and preview file storage
+  web/                  Shared API errors and health endpoint
+backend/src/main/resources/
+  application*.yml      Runtime and local development configuration
+  db/migration/         Flyway database migrations
+backend/src/test/java/jp/sabun/
+  auth/                 Authentication API and rate-limit tests
+  comparison/           PDF engine, comparison API tests and shared job fixtures
 scripts/smoke.mjs     Real-stack end-to-end API check
 compose.yaml          PostgreSQL, RabbitMQ, Spring Boot, React/Nginx
 ```

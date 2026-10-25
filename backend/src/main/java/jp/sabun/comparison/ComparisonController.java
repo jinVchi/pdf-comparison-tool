@@ -1,11 +1,12 @@
-package jp.sabun;
+package jp.sabun.comparison;
 
+import jp.sabun.auth.WorkspaceIdentity;
+import jp.sabun.storage.FileStorage;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
-import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
@@ -33,21 +34,6 @@ class ComparisonController {
         this.json = json;
         this.demo = demo;
         this.maxActive = maxActive;
-    }
-
-    @GetMapping("/health")
-    Map<String, String> health() {
-        return Map.of("status", "UP");
-    }
-
-    @GetMapping("/session")
-    Map<String, Object> session(CsrfToken token) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("csrfToken", token.getToken());
-        result.put("csrfHeader", token.getHeaderName());
-        result.put("retentionHours", 24);
-        result.put("user", WorkspaceIdentity.account());
-        return result;
     }
 
     private String owner(HttpSession session) {

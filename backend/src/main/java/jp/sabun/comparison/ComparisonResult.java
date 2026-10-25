@@ -1,4 +1,4 @@
-package jp.sabun;
+package jp.sabun.comparison;
 
 import java.util.List;
 

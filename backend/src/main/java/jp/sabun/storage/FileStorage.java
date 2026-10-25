@@ -1,4 +1,4 @@
-package jp.sabun;
+package jp.sabun.storage;
 
 import java.io.*;
 import java.nio.file.*;
@@ -7,7 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
-class FileStorage {
+public class FileStorage {
     private final Path root;
 
     FileStorage(@Value("${app.storage}") String location) throws IOException {
@@ -15,17 +15,17 @@ class FileStorage {
         Files.createDirectories(root);
     }
 
-    Path directory(UUID id) throws IOException {
+    public Path directory(UUID id) throws IOException {
         Path p = root.resolve(id.toString());
         Files.createDirectories(p);
         return p;
     }
 
-    Path file(UUID id, String name) {
+    public Path file(UUID id, String name) {
         return root.resolve(id.toString()).resolve(name);
     }
 
-    void delete(UUID id) throws IOException {
+    public void delete(UUID id) throws IOException {
         Path dir = root.resolve(id.toString()).normalize();
         if (!dir.getParent().equals(root))
             throw new IOException("Invalid storage path");

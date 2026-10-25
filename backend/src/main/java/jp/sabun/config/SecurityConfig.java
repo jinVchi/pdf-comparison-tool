@@ -1,4 +1,4 @@
-package jp.sabun;
+package jp.sabun.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

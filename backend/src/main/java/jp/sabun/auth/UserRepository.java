@@ -1,4 +1,4 @@
-package jp.sabun;
+package jp.sabun.auth;
 
 import java.util.Optional;
 import java.util.UUID;

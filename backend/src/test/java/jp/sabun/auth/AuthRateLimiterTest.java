@@ -1,4 +1,4 @@
-package jp.sabun;
+package jp.sabun.auth;
 
 import java.time.*;
 import org.junit.jupiter.api.Test;

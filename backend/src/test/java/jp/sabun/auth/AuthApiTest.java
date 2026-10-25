@@ -1,8 +1,9 @@
-package jp.sabun;
+package jp.sabun.auth;
 
+import jp.sabun.comparison.ComparisonJobFixtures;
+import jp.sabun.comparison.JobRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -54,21 +55,11 @@ class AuthApiTest {
                 .andExpect(status().isCreated());
     }
 
-    private ComparisonJob job(MockHttpSession guest) {
+    private ComparisonJobFixtures.Fixture job(MockHttpSession guest) {
         // Simulate a workspace created by an older app version; the current API never creates these.
         if (guest.getAttribute("workspace") == null)
             guest.setAttribute("workspace", UUID.randomUUID().toString());
-        var job = new ComparisonJob();
-        job.id = UUID.randomUUID();
-        job.ownerId = (String) guest.getAttribute("workspace");
-        job.status = ComparisonJob.Status.COMPLETED;
-        job.originalName = "original.pdf";
-        job.revisedName = "revised.pdf";
-        job.mode = "text";
-        job.createdAt = Instant.now();
-        job.updatedAt = job.createdAt;
-        job.resultJson = "{\"pages\":[],\"changes\":[],\"warnings\":[]}";
-        return jobs.saveAndFlush(job);
+        return ComparisonJobFixtures.completed(jobs, (String) guest.getAttribute("workspace"));
     }
 
     @Test
@@ -93,8 +84,8 @@ class AuthApiTest {
         assertThat(passwords.matches(PASSWORD, user.passwordHash)).isTrue();
         var authenticated = session(guest);
         assertThat(authenticated.get("user").get("id").asText()).isEqualTo(user.id.toString());
-        assertThat(jobs.findById(own.id).orElseThrow().ownerId).isEqualTo("user:" + user.id);
-        assertThat(jobs.findById(foreign.id).orElseThrow().ownerId).isEqualTo(foreign.ownerId);
+        assertThat(ComparisonJobFixtures.ownerId(jobs, own.id)).isEqualTo("user:" + user.id);
+        assertThat(ComparisonJobFixtures.ownerId(jobs, foreign.id)).isEqualTo(foreign.ownerId);
         mvc.perform(get("/api/comparisons/" + own.id).session(guest)).andExpect(status().isOk());
         mvc.perform(get("/api/comparisons/" + own.id).session(other)).andExpect(status().isUnauthorized());
         // A pre-authentication token cannot authorize account mutations after sign-up.
@@ -124,8 +115,8 @@ class AuthApiTest {
         session(fresh);
         mvc.perform(get("/api/comparisons/" + own.id).session(fresh)).andExpect(status().isOk());
         mvc.perform(get("/api/comparisons/" + guestJob.id).session(fresh)).andExpect(status().isOk());
-        assertThat(jobs.findById(own.id).orElseThrow().ownerId)
-                .isEqualTo(jobs.findById(guestJob.id).orElseThrow().ownerId);
+        assertThat(ComparisonJobFixtures.ownerId(jobs, own.id))
+                .isEqualTo(ComparisonJobFixtures.ownerId(jobs, guestJob.id));
         mvc.perform(post("/api/auth/sign-out").session(fresh)
                 .header("X-CSRF-TOKEN", token.get("csrfToken").asText())).andExpect(status().isForbidden());
     }
@@ -159,7 +150,7 @@ class AuthApiTest {
         auth("sign-up", other, token.get("csrfToken").asText(), email.toUpperCase(), PASSWORD)
                 .andExpect(status().isConflict());
         assertThat(session(other).get("user").isNull()).isTrue();
-        assertThat(jobs.findById(own.id).orElseThrow().ownerId).isEqualTo(own.ownerId);
+        assertThat(ComparisonJobFixtures.ownerId(jobs, own.id)).isEqualTo(own.ownerId);
     }
 
     @Test
@@ -175,7 +166,7 @@ class AuthApiTest {
                 .andExpect(status().isUnauthorized()).andReturn().getResponse().getContentAsString();
         assertThat(wrong).isEqualTo(unknown);
         assertThat(session(guest).get("user").isNull()).isTrue();
-        assertThat(jobs.findById(own.id).orElseThrow().ownerId).isEqualTo(own.ownerId);
+        assertThat(ComparisonJobFixtures.ownerId(jobs, own.id)).isEqualTo(own.ownerId);
     }
 
     @Test
@@ -246,12 +237,10 @@ class AuthApiTest {
         var stale = job(guest);
         String email = email();
         register(guest, email);
-        stale.status = ComparisonJob.Status.PROCESSING;
-        stale.progress = 50;
-        jobs.saveAndFlush(stale);
-        var current = jobs.findById(stale.id).orElseThrow();
-        assertThat(current.ownerId).isEqualTo("user:" + users.findByEmail(email).orElseThrow().id);
-        assertThat(current.progress).isEqualTo(50);
+        ComparisonJobFixtures.saveStaleWorkerProgress(jobs, stale);
+        assertThat(ComparisonJobFixtures.ownerId(jobs, stale.id))
+                .isEqualTo("user:" + users.findByEmail(email).orElseThrow().id);
+        assertThat(ComparisonJobFixtures.progress(jobs, stale.id)).isEqualTo(50);
         mvc.perform(get("/api/comparisons/" + stale.id).session(guest)).andExpect(status().isOk());
         jobs.deleteById(stale.id);
     }
