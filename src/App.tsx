@@ -19,7 +19,6 @@ import {
     Layers,
     LoaderCircle,
     LockKeyhole,
-    LogIn,
     LogOut,
     Maximize2,
     Minus,
@@ -39,12 +38,12 @@ import {
     fileSize,
     initialize,
     signOut,
+    SESSION_EXPIRED_EVENT,
     submit,
     validatePdf,
 } from "./api";
-import type { Account } from "./api";
-import AuthForm from "./AuthForm";
-import type { AuthMode } from "./AuthForm";
+import type { Account, Session } from "./api";
+import HomePage from "./HomePage";
 import type { Change, Job, Kind, Mode } from "./types";
 import { kindLabels, modeLabels, statusLabels } from "./types";
 
@@ -52,6 +51,55 @@ type View = "new" | "history" | "help";
 const active = (j: Job) => j.status === "QUEUED" || j.status === "PROCESSING";
 
 function App() {
+    const [session, setSession] = useState<Session | null>(null);
+    const [checking, setChecking] = useState(true);
+    const [connectionError, setConnectionError] = useState("");
+    const refreshSession = useCallback(async () => {
+        setChecking(true);
+        setSession(null);
+        try {
+            setSession(await initialize());
+            setConnectionError("");
+        } catch (e) {
+            setConnectionError((e as Error).message);
+        } finally {
+            setChecking(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        void refreshSession();
+        const expired = () => { void refreshSession(); };
+        window.addEventListener(SESSION_EXPIRED_EVENT, expired);
+        return () => window.removeEventListener(SESSION_EXPIRED_EVENT, expired);
+    }, [refreshSession]);
+
+    useEffect(() => {
+        if (checking) return;
+        let cancelled = false;
+        const accountId = session?.user?.id;
+        function checkIdentity() {
+            if (document.visibilityState === "hidden") return;
+            void initialize().then((current) => {
+                if (!cancelled && accountId !== current.user?.id) setSession(current);
+            }).catch(() => { /* A later action or reconnect will show network errors. */ });
+        }
+        window.addEventListener("focus", checkIdentity);
+        document.addEventListener("visibilitychange", checkIdentity);
+        return () => {
+            cancelled = true;
+            window.removeEventListener("focus", checkIdentity);
+            document.removeEventListener("visibilitychange", checkIdentity);
+        };
+    }, [checking, session?.user?.id]);
+
+    if (checking || !session?.user)
+        return <HomePage ready={!checking && session !== null} checking={checking}
+            error={connectionError} retry={() => void refreshSession()} />;
+    return <Workspace key={session.user.id} user={session.user} />;
+}
+
+function Workspace({ user }: { user: Account }) {
     const [view, setView] = useState<View>("new");
     const [files, setFiles] = useState<[File | null, File | null]>([
         null,
@@ -67,17 +115,12 @@ function App() {
     const [error, setError] = useState("");
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<Job | null>(null);
-    const [user, setUser] = useState<Account | null>(null);
-    const [authMode, setAuthMode] = useState<AuthMode | null>(null);
-    const [authBusy, setAuthBusy] = useState(false);
     const [signingOut, setSigningOut] = useState(false);
 
     const connect = useCallback(async () => {
         try {
-            const session = await initialize();
-            setUser(session.user);
-            setConnected(true);
             setJobs(await api<Job[]>("/comparisons"));
+            setConnected(true);
             setError("");
         } catch (e) {
             setConnected(false);
@@ -87,17 +130,6 @@ function App() {
     useEffect(() => {
         void connect();
     }, [connect]);
-    useEffect(() => {
-        if (!connected) return;
-        // Another tab may have signed out or switched accounts while this tab was hidden.
-        function refreshIdentity() {
-            void initialize().then((session) => {
-                if (session.user?.id !== user?.id) window.location.reload();
-            }).catch(() => { /* The next API action shows connection errors. */ });
-        }
-        window.addEventListener("focus", refreshIdentity);
-        return () => window.removeEventListener("focus", refreshIdentity);
-    }, [connected, user?.id]);
     useEffect(() => {
         if (!connected || (!jobs.some(active) && (!job || !active(job))))
             return;
@@ -299,10 +331,10 @@ function App() {
                         比較の設定
                     </button>
                     <div className="workspace-user">
-                        <span className="avatar">{user ? user.email[0].toUpperCase() : "G"}</span>
+                        <span className="avatar">{user.email[0].toUpperCase()}</span>
                         <div>
-                            <strong title={user?.email}>{user?.email ?? "ゲストワークスペース"}</strong>
-                            <span>{user ? "アカウントの比較履歴" : "セッション内のファイルを管理"}</span>
+                            <strong title={user.email}>{user.email}</strong>
+                            <span>アカウントの比較履歴</span>
                         </div>
                         <LockKeyhole size={14} />
                     </div>
@@ -332,20 +364,9 @@ function App() {
                             {connected ? "接続済み" : "未接続"}
                         </span>
                         <span className="header-divider" />
-                        {user ? (
-                            <button className="help-button" disabled={signingOut || loading} onClick={() => void logout()}>
-                                <LogOut size={15} /> ログアウト
-                            </button>
-                        ) : (
-                            <div className="auth-actions">
-                                <button className="help-button" disabled={!connected || loading} onClick={() => setAuthMode("sign-in")}>
-                                    <LogIn size={15} /> ログイン
-                                </button>
-                                <button className="auth-register" disabled={!connected || loading} onClick={() => setAuthMode("sign-up")}>
-                                    新規登録
-                                </button>
-                            </div>
-                        )}
+                        <button className="help-button" disabled={signingOut || loading} onClick={() => void logout()}>
+                            <LogOut size={15} /> ログアウト
+                        </button>
                         <button
                             className="help-button"
                             onClick={() => navigate("help")}
@@ -523,7 +544,7 @@ function App() {
                                 <div className="start-row">
                                     <p>
                                         <ShieldCheck size={16} />
-                                        {user ? "このアカウントのファイルだけを表示します" : "このセッションのファイルだけを表示します"}
+                                        このアカウントのファイルだけを表示します
                                     </p>
                                     <button
                                         className="primary-button"
@@ -771,7 +792,7 @@ function App() {
                                     </div>
                                     <h1>比較履歴</h1>
                                     <p>
-                                        {user ? "このアカウントで比較した書類を、もう一度確認できます。" : "このセッションで比較した書類を、もう一度確認できます。"}
+                                        このアカウントで比較した書類を、もう一度確認できます。
                                     </p>
                                 </div>
                                 <button
@@ -827,12 +848,6 @@ function App() {
                     )}
                 </main>
             </div>
-            {authMode && (
-                <Modal title={authMode === "sign-up" ? "アカウントを作成" : "ログイン"}
-                    close={() => { if (!authBusy) setAuthMode(null); }}>
-                    <AuthForm mode={authMode} changeMode={setAuthMode} busy={authBusy} setBusy={setAuthBusy} />
-                </Modal>
-            )}
             {signingOut && <div className="modal-backdrop" role="status"><div className="modal">ログアウト中…</div></div>}
             {settingsOpen && (
                 <Modal
@@ -1684,7 +1699,7 @@ function Help({ start, demo }: { start: () => void; demo: () => void }) {
                     </dd>
                     <dt>ファイルはいつ削除されますか？</dt>
                     <dd>
-                        完了・エラーになった比較データは作成から24時間後に自動削除されます。履歴から手動で削除することもできます。ログインすると履歴はアカウントに保存され、別のブラウザーからも確認できます。ゲストの履歴は現在のブラウザーセッションに紐づき、登録・ログイン時にアカウントへ引き継がれます。
+                        完了・エラーになった比較データは作成から24時間後に自動削除されます。履歴から手動で削除することもできます。履歴はアカウントに保存され、ログインすれば別のブラウザーからも確認できます。PDFの比較・履歴の閲覧にはログインが必要です。
                     </dd>
                 </dl>
                 <div className="help-actions">

@@ -11,6 +11,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -54,6 +55,9 @@ class AuthApiTest {
     }
 
     private ComparisonJob job(MockHttpSession guest) {
+        // Simulate a workspace created by an older app version; the current API never creates these.
+        if (guest.getAttribute("workspace") == null)
+            guest.setAttribute("workspace", UUID.randomUUID().toString());
         var job = new ComparisonJob();
         job.id = UUID.randomUUID();
         job.ownerId = (String) guest.getAttribute("workspace");
@@ -68,10 +72,11 @@ class AuthApiTest {
     }
 
     @Test
-    void registrationHashesPasswordsRotatesSessionAndTransfersOnlyCurrentGuestHistory() throws Exception {
+    void registrationHashesPasswordsRotatesSessionAndPreservesLegacyGuestHistory() throws Exception {
         var guest = new MockHttpSession();
         var initial = session(guest);
         assertThat(initial.get("user").isNull()).isTrue();
+        assertThat(guest.getAttribute("workspace")).isNull();
         String oldId = guest.getId();
         var own = job(guest);
         var other = new MockHttpSession();
@@ -91,7 +96,7 @@ class AuthApiTest {
         assertThat(jobs.findById(own.id).orElseThrow().ownerId).isEqualTo("user:" + user.id);
         assertThat(jobs.findById(foreign.id).orElseThrow().ownerId).isEqualTo(foreign.ownerId);
         mvc.perform(get("/api/comparisons/" + own.id).session(guest)).andExpect(status().isOk());
-        mvc.perform(get("/api/comparisons/" + own.id).session(other)).andExpect(status().isNotFound());
+        mvc.perform(get("/api/comparisons/" + own.id).session(other)).andExpect(status().isUnauthorized());
         // A pre-authentication token cannot authorize account mutations after sign-up.
         mvc.perform(post("/api/auth/sign-out").session(guest)
                 .header("X-CSRF-TOKEN", initial.get("csrfToken").asText())).andExpect(status().isForbidden());
@@ -110,7 +115,7 @@ class AuthApiTest {
         assertThat(first.isInvalid()).isTrue();
         var fresh = new MockHttpSession();
         var token = session(fresh);
-        mvc.perform(get("/api/comparisons/" + own.id).session(fresh)).andExpect(status().isNotFound());
+        mvc.perform(get("/api/comparisons/" + own.id).session(fresh)).andExpect(status().isUnauthorized());
         var guestJob = job(fresh);
         String oldId = fresh.getId();
         auth("sign-in", fresh, token.get("csrfToken").asText(), email.toUpperCase(), PASSWORD)
@@ -203,6 +208,35 @@ class AuthApiTest {
         mvc.perform(post("/api/auth/sign-up").session(guest).header("X-CSRF-TOKEN", token)
                 .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void anonymousUsersCannotUseAnyComparisonEndpointEvenWithValidCsrf() throws Exception {
+        var anonymous = new MockHttpSession();
+        var initial = session(anonymous);
+        String csrf = initial.get("csrfToken").asText();
+        assertThat(initial.get("user").isNull()).isTrue();
+        assertThat(anonymous.getAttribute("workspace")).isNull();
+        mvc.perform(get("/api/health")).andExpect(status().isOk());
+        String id = UUID.randomUUID().toString();
+        for (String path : new String[] { "/api/comparisons", "/api/comparisons/" + id,
+                "/api/comparisons/" + id + "/report", "/api/comparisons/" + id + "/pages/original/1" })
+            mvc.perform(get(path).session(anonymous)).andExpect(status().isUnauthorized())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andExpect(jsonPath("$.message").value("ログインしてからご利用ください。"))
+                    .andExpect(header().doesNotExist("Location"));
+        long before = jobs.count();
+        mvc.perform(post("/api/comparisons/demo").session(anonymous).header("X-CSRF-TOKEN", csrf))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(multipart("/api/comparisons").file(new MockMultipartFile("original", "fake.pdf",
+                "application/pdf", "%PDF-".getBytes())).session(anonymous).header("X-CSRF-TOKEN", csrf))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(delete("/api/comparisons/" + id).session(anonymous).header("X-CSRF-TOKEN", csrf))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/auth/sign-out").session(anonymous).header("X-CSRF-TOKEN", csrf))
+                .andExpect(status().isUnauthorized());
+        assertThat(jobs.count()).isEqualTo(before);
+        assertThat(anonymous.getAttribute("workspace")).isNull();
     }
 
     @Test

@@ -38,9 +38,20 @@ const owner = new Client();
 assert.equal((await owner.refresh()).user, null);
 const guestCookie = owner.cookie;
 const guestToken = owner.token.csrfToken;
-const demo = await owner.request('/comparisons/demo', 'POST');
-assert.equal(demo.status, 202, await demo.clone().text());
-const job = await demo.json();
+const unknownId = randomUUID();
+for (const path of ['/comparisons', `/comparisons/${unknownId}`, `/comparisons/${unknownId}/report`, `/comparisons/${unknownId}/pages/original/1`]) {
+  const blocked = await owner.request(path);
+  assert.equal(blocked.status, 401, path);
+  assert.ok(blocked.headers.get('content-type').includes('application/json'));
+  assert.equal(blocked.headers.get('location'), null);
+}
+assert.equal((await owner.request('/comparisons/demo', 'POST')).status, 401);
+assert.equal((await owner.request(`/comparisons/${unknownId}`, 'DELETE')).status, 401);
+const anonymousUpload = new FormData();
+anonymousUpload.append('original', new Blob(['%PDF-']), 'sample.pdf');
+assert.equal((await fetch(`${base}/comparisons`, {
+  method: 'POST', headers: { Cookie: owner.cookie, [owner.token.csrfHeader]: owner.token.csrfToken }, body: anonymousUpload,
+})).status, 401);
 const registration = await owner.auth('sign-up');
 assert.equal(registration.status, 201, await registration.clone().text());
 const account = await registration.json();
@@ -48,12 +59,15 @@ assert.equal(account.email, email);
 assert.equal(account.passwordHash, undefined);
 assert.notEqual(owner.cookie, guestCookie, 'session ID must rotate at sign-up');
 assert.equal((await owner.refresh()).user.id, account.id);
+const demo = await owner.request('/comparisons/demo', 'POST');
+assert.equal(demo.status, 202, await demo.clone().text());
+const job = await demo.json();
 
 const staleWrite = await fetch(`${base}/auth/sign-out`, {
   method: 'POST', headers: { Cookie: owner.cookie, 'X-CSRF-TOKEN': guestToken },
 });
 assert.equal(staleWrite.status, 403, 'pre-authentication CSRF must be rejected');
-assert.equal((await fetch(`${base}/comparisons/${job.id}`, { headers: { Cookie: guestCookie } })).status, 404);
+assert.equal((await fetch(`${base}/comparisons/${job.id}`, { headers: { Cookie: guestCookie } })).status, 401);
 
 const secondBrowser = new Client();
 await secondBrowser.refresh();
@@ -92,14 +106,14 @@ assert.equal((await secondBrowser.request(`/comparisons/${job.id}/pages/original
 const signedOutCookie = owner.cookie;
 assert.equal((await owner.request('/auth/sign-out', 'POST')).status, 204);
 assert.equal((await owner.refresh()).user, null);
-assert.deepEqual(await (await owner.request('/comparisons')).json(), []);
-assert.equal((await fetch(`${base}/comparisons/${job.id}`, { headers: { Cookie: signedOutCookie } })).status, 404);
+assert.equal((await owner.request('/comparisons')).status, 401);
+assert.equal((await fetch(`${base}/comparisons/${job.id}`, { headers: { Cookie: signedOutCookie } })).status, 401);
 assert.equal((await owner.auth('sign-in')).status, 200);
 await owner.refresh();
 assert.equal((await owner.request(`/comparisons/${job.id}`)).status, 200);
 assert.equal((await owner.request(`/comparisons/${job.id}`, 'DELETE')).status, 204);
 console.log(JSON.stringify({ status: 'PASS', checks: [
-  'registration in PostgreSQL', 'session ID rotation', 'CSRF rotation', 'guest history transfer during queued processing',
+  'mandatory login for all comparison endpoints', 'registration in PostgreSQL', 'session ID rotation', 'CSRF rotation',
   'credential rejection', 'sign-in from a second browser', 'account isolation on detail/PNG/CSV/delete',
   'worker ownership preservation', 'logout invalidation', 'history restored after sign-in',
 ] }, null, 2));

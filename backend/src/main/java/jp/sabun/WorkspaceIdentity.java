@@ -1,10 +1,11 @@
 package jp.sabun;
 
-import jakarta.servlet.http.HttpSession;
 import java.io.Serializable;
 import java.security.Principal;
 import java.util.UUID;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 final class WorkspaceIdentity {
     record Account(UUID id, String email) implements Principal, Serializable {
@@ -25,14 +26,10 @@ final class WorkspaceIdentity {
                 && authentication.getPrincipal() instanceof Account account ? account : null;
     }
 
-    static String owner(HttpSession session) {
+    static String owner() {
         var account = account();
-        if (account != null)
-            return account.ownerId();
-        synchronized (session) {
-            if (session.getAttribute("workspace") == null)
-                session.setAttribute("workspace", UUID.randomUUID().toString());
-            return (String) session.getAttribute("workspace");
-        }
+        if (account == null)
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ログインしてからご利用ください。");
+        return account.ownerId();
     }
 }

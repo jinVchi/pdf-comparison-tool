@@ -8,6 +8,12 @@ export type Session = {
 };
 let csrf: Session | undefined;
 let initializing: Promise<Session> | null = null;
+export const SESSION_EXPIRED_EVENT = "sabun:session-expired";
+
+function sessionExpired() {
+    if (typeof window !== "undefined")
+        window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+}
 
 export function initialize(): Promise<Session> {
     if (initializing) return initializing;
@@ -74,8 +80,12 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     }
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        if (res.status === 403) {
+        if (res.status === 401 || res.status === 403) {
             csrf = undefined;
+            // Incorrect credentials belong to the form; workspace failures must discard private UI state.
+            if (!path.startsWith("/auth/")) sessionExpired();
+        }
+        if (res.status === 403) {
             throw new Error("セッションが切れました。もう一度お試しください。");
         }
         throw new Error(

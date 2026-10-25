@@ -41,8 +41,7 @@ class ComparisonController {
     }
 
     @GetMapping("/session")
-    Map<String, Object> session(HttpSession session, CsrfToken token) {
-        owner(session);
+    Map<String, Object> session(CsrfToken token) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("csrfToken", token.getToken());
         result.put("csrfHeader", token.getHeaderName());
@@ -52,7 +51,7 @@ class ComparisonController {
     }
 
     private String owner(HttpSession session) {
-        return WorkspaceIdentity.owner(session);
+        return WorkspaceIdentity.owner();
     }
 
     @GetMapping("/comparisons")

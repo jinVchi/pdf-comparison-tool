@@ -12,7 +12,7 @@ Requires Docker Desktop with Linux containers. From the repository root:
 docker compose up --build -d
 ```
 
-Open **http://localhost:3000**. Click **サンプルPDFで試す** to submit two real Japanese estimates through RabbitMQ. Initial images and Maven dependencies may take several minutes to download.
+Open **http://localhost:3000**. The home page contains the login form; use **新規登録** to create an account. After signing in, click **サンプルPDFで試す** to submit two real Japanese estimates through RabbitMQ. Initial images and Maven dependencies may take several minutes to download.
 
 ```powershell
 docker compose logs -f api
@@ -77,8 +77,8 @@ The demo generator uses a Japanese TrueType font. Windows automatically uses `C:
 - Durable database job records, RabbitMQ workers, progress polling, and idempotent atomic job claims.
 - Side-by-side and opacity-controlled overlay views, zoom, page selection, and a filterable change list.
 - UTF-8 BOM CSV reports, with spreadsheet formula escaping.
-- Email/password registration, sign-in/sign-out, account-private history across browsers, and optional guest workspaces.
-- Guest history moves into the account on registration or sign-in; manual deletion and 24-hour expiry still apply.
+- Login home page with email/password registration and sign-in/sign-out. Authentication is required for the comparison workspace and all document APIs.
+- Account-private history across browsers, manual deletion, and 24-hour expiry of comparison files/results.
 - Spring Security CSRF protection, HttpOnly session cookies, ownership checks on every document endpoint, and same-origin frontend/API access.
 - Japanese sample documents, loading/error/empty states, keyboard-accessible controls, responsive layouts, and reduced-motion support.
 
@@ -99,7 +99,8 @@ The fixed consumer count and prefetch bound concurrent PDF work; queued work sta
 - Pages are paired by **page number**. Mid-document insertions, page reordering, skew, and scan registration are not automatically aligned.
 - Text extraction depends on the PDF's Unicode mappings. Vertical writing, unusual fonts, and ambiguous reading order can produce imperfect text grouping. Inspect appearance mode for these documents.
 - Visual comparison uses sampled pixels and tiles. It is a review aid, not a guarantee that every sub-pixel mark will be found. Different renderings/scanner noise may produce extra differences.
-- Accounts are persisted in PostgreSQL (file-backed H2 in dev). Sessions expire after eight hours or an API restart; signing in again restores the account's unexpired history. Guest history is scoped to an HttpSession and becomes inaccessible when that session expires. Registration/sign-in transfers only the current guest workspace into the account. Sign-out invalidates the session and returns to a fresh guest workspace.
+- Accounts are persisted in PostgreSQL (file-backed H2 in dev). Sessions expire after eight hours or an API restart; signing in again restores the account's unexpired history. Sign-out invalidates the session and returns to the login home page. The app waits for session validation before rendering any workspace and clears the workspace when protected API access expires. It also checks for account changes when the tab regains focus or becomes visible.
+- Anonymous clients may only bootstrap a CSRF token (`GET /api/session`), check health (`GET /api/health`), or submit sign-in/sign-up requests. All other `/api/**` routes require authentication, including uploads, demos, history, PNG previews, CSV exports, deletion, and sign-out. Anonymous document requests return JSON HTTP 401; writes without valid CSRF return HTTP 403. No new guest workspaces are created. Unexpired guest history left by older versions is transferred on the next registration/sign-in from that same session.
 - Passwords use BCrypt (cost 12), require at least 12 characters, and are limited to 72 UTF-8 bytes. Email addresses are trimmed and case-normalized, with a database uniqueness constraint. Session IDs and CSRF tokens rotate at sign-in/registration; every auth mutation requires CSRF. No passwords or bearer tokens are stored in browser storage. Email verification and password recovery are not included.
 - Authentication has bounded, in-memory per-remote-address limits: 5 registration attempts and 20 sign-in attempts per 15 minutes. Limits reset on API restart and are not distributed. Behind the bundled Nginx proxy, clients share the proxy's address and quota; add client-aware perimeter limits for public deployment.
 - This is a runnable local MVP. Internet deployment needs HTTPS (`COOKIE_SECURE=true`), real secrets, perimeter upload/auth rate limits and capacity admission, monitoring, and a reviewed retention policy.
@@ -138,11 +139,11 @@ node scripts/smoke.mjs
 node scripts/auth-smoke.mjs
 ```
 
-The smoke test creates sample documents, waits for real queued processing, verifies Japanese amount/phrase changes, checks PNG/CSV responses, and tests CSRF, cross-session isolation, and invalid uploads. Its sample data remains until automatic expiry for inspection.
+The smoke test creates two synthetic accounts and sample documents, waits for real queued processing, verifies Japanese amount/phrase changes, checks PNG/CSV responses, and tests CSRF, account isolation, and invalid uploads. Its sample data remains until automatic expiry for inspection.
 
-The auth smoke test creates two synthetic `@example.com` accounts, tests authentication and account isolation against the real stack, and deletes its sample comparison. The synthetic accounts remain in the local database.
+The auth smoke test creates two synthetic `@example.com` accounts, verifies mandatory authentication on every document API, tests sign-in/sign-out and account isolation against the real stack, and deletes its sample comparison. Both smoke tests leave their synthetic accounts in the local database.
 
-Backend tests cover unchanged documents, numeric changes and coordinates, scanned/graphic changes, mixed mode, page addition, text removal, Japanese normalization, encrypted PDFs, limits, safe CSV cells, CSRF, ownership, duplicate claims, account registration/sign-in/sign-out, guest-history transfer, session/CSRF rotation, and account isolation. API integration tests use an isolated in-memory H2 database; the smoke test verifies the real PostgreSQL/RabbitMQ stack.
+Backend tests cover unchanged documents, numeric changes and coordinates, scanned/graphic changes, mixed mode, page addition, text removal, Japanese normalization, encrypted PDFs, limits, safe CSV cells, CSRF, ownership, duplicate claims, mandatory authentication, account registration/sign-in/sign-out, legacy guest-history transfer, session/CSRF rotation, and account isolation. API integration tests use an isolated in-memory H2 database; the smoke test verifies the real PostgreSQL/RabbitMQ stack.
 
 ## Repository map
 

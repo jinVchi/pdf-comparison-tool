@@ -7,6 +7,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import java.time.Instant;
 import java.util.UUID;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -24,9 +28,20 @@ class ComparisonApiTest {
     @Autowired
     JobRepository jobs;
 
+    private MockHttpSession account(UUID id) {
+        var session = new MockHttpSession();
+        var context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(
+                new WorkspaceIdentity.Account(id, id + "@example.com"), null,
+                AuthorityUtils.createAuthorityList("ROLE_USER")));
+        session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, context);
+        return session;
+    }
+
     @Test
     void writesRequireCsrf() throws Exception {
-        mvc.perform(post("/api/comparisons/demo")).andExpect(status().isForbidden());
+        mvc.perform(post("/api/comparisons/demo").session(account(UUID.randomUUID())))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -34,16 +49,18 @@ class ComparisonApiTest {
         mvc.perform(multipart("/api/comparisons")
                 .file(new MockMultipartFile("original", "fake.pdf", "application/pdf", "not a pdf".getBytes()))
                 .file(new MockMultipartFile("revised", "fake.pdf", "application/pdf", "not a pdf".getBytes()))
+                .session(account(UUID.randomUUID()))
                 .with(csrf())).andExpect(status().isBadRequest());
     }
 
     @Test
-    void sessionsCannotReadDownloadOrDeleteOtherJobs() throws Exception {
-        var owner = new MockHttpSession();
+    void accountsCannotReadDownloadOrDeleteOtherJobs() throws Exception {
+        var ownerId = UUID.randomUUID();
+        var owner = account(ownerId);
         mvc.perform(get("/api/session").session(owner)).andExpect(status().isOk());
         var job = new ComparisonJob();
         job.id = UUID.randomUUID();
-        job.ownerId = (String) owner.getAttribute("workspace");
+        job.ownerId = "user:" + ownerId;
         job.status = ComparisonJob.Status.COMPLETED;
         job.originalName = "original.pdf";
         job.revisedName = "revised.pdf";
@@ -54,7 +71,7 @@ class ComparisonApiTest {
         jobs.save(job);
         mvc.perform(get("/api/comparisons/" + job.id).session(owner)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.originalName").value("original.pdf"));
-        var other = new MockHttpSession();
+        var other = account(UUID.randomUUID());
         for (String suffix : new String[] { "", "/report", "/pages/original/1" })
             mvc.perform(get("/api/comparisons/" + job.id + suffix).session(other)).andExpect(status().isNotFound());
         mvc.perform(delete("/api/comparisons/" + job.id).session(other).with(csrf())).andExpect(status().isNotFound());

@@ -51,6 +51,7 @@ class AuthController {
             if (WorkspaceIdentity.account() != null || contexts.containsContext(request))
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "別のアカウントを使うには、ログアウトしてください。");
             limiter.check(request.getRemoteAddr(), registration);
+            // Preserve history from guest sessions created by older versions. New sessions have no guest workspace.
             String guest = (String) session.getAttribute("workspace");
             WorkspaceIdentity.Account account;
             try {

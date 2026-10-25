@@ -278,18 +278,6 @@ input[type="range"] {
     font-weight: 500;
     display: block;
 }
-.auth-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-.auth-register {
-    background: var(--green);
-    color: white;
-    padding: 7px 12px;
-    border-radius: 6px;
-    white-space: nowrap;
-}
 .auth-form {
     display: grid;
     gap: 16px;
@@ -334,9 +322,7 @@ input[type="range"] {
     font-size: 12px;
 }
 @media (max-width: 600px) {
-    .auth-actions { gap: 6px; }
     .header-right > .help-button:last-child { display: none; }
-    .auth-register { padding: 6px 8px; }
 }
 .workspace-user div > span {
     display: block;

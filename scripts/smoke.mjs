@@ -1,9 +1,19 @@
 // Exercises a real API, PostgreSQL and RabbitMQ. Start them before running.
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 const base = process.env.API_URL || 'http://127.0.0.1:8080/api';
 async function session() {
-  const res = await fetch(`${base}/session`);assert.equal(res.status,200);
-  return { token:await res.json(), cookie:res.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ') };
+  let res = await fetch(`${base}/session`);assert.equal(res.status,200);
+  let token = await res.json();
+  let cookie = res.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');
+  const registration = await fetch(`${base}/auth/sign-up`, { method:'POST', headers:{
+    Cookie:cookie, [token.csrfHeader]:token.csrfToken, 'Content-Type':'application/json',
+  }, body:JSON.stringify({email:`pdf-smoke-${randomUUID()}@example.com`, password:`smoke-${randomUUID()}`}) });
+  assert.equal(registration.status,201,await registration.clone().text());
+  cookie = registration.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');
+  res = await fetch(`${base}/session`, {headers:{Cookie:cookie}});assert.equal(res.status,200);
+  token = await res.json();assert.ok(token.user);
+  return { token, cookie };
 }
 function headers(s, write=false) {return {Cookie:s.cookie,...(write?{[s.token.csrfHeader]:s.token.csrfToken}:{})};}
 function tinyPdf(text) {
@@ -44,5 +54,5 @@ for(let n=0;n<60;n++) {
 assert.equal(uploadJob.status,'COMPLETED');assert.equal(uploadJob.originalName,'変更前.pdf');assert.equal(uploadJob.changeCount,1);assert.equal(uploadJob.result.changes[0].after,'Amount 1200');
 assert.equal((await fetch(`${base}/comparisons/${uploadId}`,{method:'DELETE',headers:headers(owner,true)})).status,204);
 assert.equal((await fetch(`${base}/comparisons/${uploadId}`,{headers:headers(owner)})).status,404);
-console.log(JSON.stringify({status:'PASS',jobId:job.id,pages:job.pageCount,changes:job.changeCount,checks:['real Japanese PDF generation','PostgreSQL persistence','RabbitMQ processing','Japanese amount and phrase changes','PNG preview','CSV export','CSRF','session isolation','invalid upload rejection','multipart upload and comparison','Unicode filenames','deletion']},null,2));
+console.log(JSON.stringify({status:'PASS',jobId:job.id,pages:job.pageCount,changes:job.changeCount,checks:['authenticated comparison flow','real Japanese PDF generation','PostgreSQL persistence','RabbitMQ processing','Japanese amount and phrase changes','PNG preview','CSV export','CSRF','account isolation','invalid upload rejection','multipart upload and comparison','Unicode filenames','deletion']},null,2));
 // Keep this sample until automatic expiry so its PDF rendering can be inspected.

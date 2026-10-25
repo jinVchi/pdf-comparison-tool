@@ -31,7 +31,7 @@ describe("account API session transitions", () => {
         expect(fetcher.mock.calls[3][1].headers.get("X-CSRF-TOKEN")).toBe("account-token");
     });
 
-    it("signs out with CSRF and starts a fresh guest session for later requests", async () => {
+    it("signs out with CSRF and refreshes the anonymous session before another request", async () => {
         const fetcher = vi.fn()
             .mockResolvedValueOnce(response(session("account-token", account)))
             .mockResolvedValueOnce(new Response(null, { status: 204 }))
@@ -47,7 +47,23 @@ describe("account API session transitions", () => {
         expect(fetcher.mock.calls[2][0]).toBe("/api/session");
     });
 
+    it("notifies the app when a protected request loses authentication, without retrying it", async () => {
+        const dispatchEvent = vi.fn();
+        vi.stubGlobal("window", { dispatchEvent });
+        const fetcher = vi.fn()
+            .mockResolvedValueOnce(response(session("account-token", account)))
+            .mockResolvedValueOnce(response({ message: "ログインしてからご利用ください。" }, 401));
+        vi.stubGlobal("fetch", fetcher);
+        const { api, SESSION_EXPIRED_EVENT } = await import("./api");
+        await expect(api("/comparisons")).rejects.toThrow("ログインしてからご利用ください。");
+        expect(dispatchEvent).toHaveBeenCalledTimes(1);
+        expect(dispatchEvent.mock.calls[0][0].type).toBe(SESSION_EXPIRED_EVENT);
+        expect(fetcher).toHaveBeenCalledTimes(2);
+    });
+
     it("shows credential errors and never retries a failed authentication mutation", async () => {
+        const dispatchEvent = vi.fn();
+        vi.stubGlobal("window", { dispatchEvent });
         const fetcher = vi.fn()
             .mockResolvedValueOnce(response(session("guest-token")))
             .mockResolvedValueOnce(response({ message: "メールアドレスまたはパスワードが正しくありません。" }, 401));
@@ -56,6 +72,7 @@ describe("account API session transitions", () => {
         await expect(authenticate("sign-in", account.email, "wrong-password"))
             .rejects.toThrow("メールアドレスまたはパスワードが正しくありません。");
         expect(fetcher).toHaveBeenCalledTimes(2);
+        expect(dispatchEvent).not.toHaveBeenCalled();
     });
 
     it("refreshes expired CSRF on the next action without replaying the failed POST", async () => {

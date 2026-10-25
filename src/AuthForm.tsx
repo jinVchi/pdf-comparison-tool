@@ -4,11 +4,12 @@ import { authenticate } from "./api";
 
 export type AuthMode = "sign-in" | "sign-up";
 
-export default function AuthForm({ mode, changeMode, busy, setBusy }: {
+export default function AuthForm({ mode, changeMode, busy, setBusy, disabled = false }: {
     mode: AuthMode;
     changeMode: (mode: AuthMode) => void;
     busy: boolean;
     setBusy: (busy: boolean) => void;
+    disabled?: boolean;
 }) {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -18,7 +19,7 @@ export default function AuthForm({ mode, changeMode, busy, setBusy }: {
 
     async function submit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        if (busy) return;
+        if (busy || disabled) return;
         if (registering && (Array.from(password).length < 12 || new TextEncoder().encode(password).length > 72)) {
             setError("パスワードは12文字以上、UTF-8で72バイト以内にしてください。");
             return;
@@ -41,8 +42,7 @@ export default function AuthForm({ mode, changeMode, busy, setBusy }: {
 
     return (
         <form className="auth-form" onSubmit={(event) => void submit(event)}>
-            <p>ログインすると、別のブラウザーからも比較履歴を確認できます。ファイルの保存期間は24時間です。</p>
-            <fieldset disabled={busy}>
+            <fieldset disabled={busy || disabled}>
                 <label htmlFor="auth-email">メールアドレス</label>
                 <input id="auth-email" type="email" autoComplete="email" required maxLength={254}
                     value={email} onChange={(event) => setEmail(event.target.value)} />
@@ -59,8 +59,8 @@ export default function AuthForm({ mode, changeMode, busy, setBusy }: {
                 </>}
             </fieldset>
             {error && <div className="auth-error" role="alert">{error}</div>}
-            <div className="info-box"><LockKeyhole size={14} /> 現在のゲスト履歴は、このアカウントに引き継がれます。</div>
-            <button className="primary-button full-width" type="submit" disabled={busy}>
+            <div className="auth-privacy"><LockKeyhole size={14} /> 比較した書類は、あなたのアカウントだけで確認できます。</div>
+            <button className="primary-button full-width" type="submit" disabled={busy || disabled}>
                 {busy && <LoaderCircle size={16} className="spin" />}
                 {busy ? "処理中…" : registering ? "アカウントを作成" : "ログイン"}
             </button>

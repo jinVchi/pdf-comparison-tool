@@ -2,6 +2,7 @@ package jp.sabun;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -32,7 +33,24 @@ class SecurityConfig {
     SecurityFilterChain security(HttpSecurity http, SecurityContextRepository contexts, CsrfTokenRepository csrf)
             throws Exception {
         return http
-                .authorizeHttpRequests(a -> a.requestMatchers("/api/**", "/error").permitAll().anyRequest().denyAll())
+                .authorizeHttpRequests(a -> a
+                        .requestMatchers(HttpMethod.GET, "/api/health", "/api/session").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/sign-in", "/api/auth/sign-up").permitAll()
+                        .requestMatchers("/api/**").authenticated()
+                        .requestMatchers("/error").permitAll()
+                        .anyRequest().denyAll())
+                .requestCache(c -> c.disable())
+                .exceptionHandling(e -> e
+                        .authenticationEntryPoint((request, response, exception) -> {
+                            response.setStatus(401);
+                            response.setContentType("application/json;charset=UTF-8");
+                            response.getWriter().write("{\"message\":\"ログインしてからご利用ください。\"}");
+                        })
+                        .accessDeniedHandler((request, response, exception) -> {
+                            response.setStatus(403);
+                            response.setContentType("application/json;charset=UTF-8");
+                            response.getWriter().write("{\"message\":\"セッションを確認できません。もう一度お試しください。\"}");
+                        }))
                 .securityContext(c -> c.securityContextRepository(contexts))
                 .csrf(c -> c.csrfTokenRepository(csrf))
                 .logout(l -> l.disable())
