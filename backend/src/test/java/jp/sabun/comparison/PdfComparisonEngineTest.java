@@ -7,6 +7,11 @@ import org.apache.pdfbox.pdmodel.font.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.awt.Color;
+import java.awt.Font;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.util.List;
+import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import java.nio.file.*;
 import static org.assertj.core.api.Assertions.*;
 
@@ -51,6 +56,110 @@ class PdfComparisonEngineTest {
         Path a = pdf("a.pdf", "Amount 1,000", false, 1);
         assertThat(compare(a, a, "mixed").changes()).isEmpty();
         assertThat(temp.resolve("original-1.png")).exists();
+    }
+
+    @Test
+    void numericValuesAreNotClassifiedAsLayoutChanges() throws Exception {
+        var result = compare(pdf("number-a.pdf", "83", false, 1), pdf("number-b.pdf", "84", false, 1), "mixed");
+        assertThat(result.changes()).singleElement().satisfies(change -> {
+            assertThat(change.kind()).isEqualTo("NUMERIC");
+            assertThat(change.before()).isEqualTo("83");
+            assertThat(change.after()).isEqualTo("84");
+        });
+    }
+
+    private Path scanned(String name, String value, boolean stamp) throws Exception {
+        var image = new BufferedImage(595, 842, BufferedImage.TYPE_INT_RGB);
+        var graphics = image.createGraphics();
+        graphics.setColor(Color.WHITE);
+        graphics.fillRect(0, 0, 595, 842);
+        graphics.setColor(Color.BLACK);
+        graphics.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 24));
+        graphics.drawString(value, 50, 100);
+        if (stamp) {
+            graphics.setColor(Color.RED);
+            graphics.fillRect(300, 400, 45, 35);
+        }
+        graphics.dispose();
+        Path path = temp.resolve(name);
+        try (var document = new PDDocument()) {
+            var page = new PDPage(new PDRectangle(595, 842));
+            document.addPage(page);
+            try (var content = new PDPageContentStream(document, page)) {
+                content.drawImage(LosslessFactory.createFromImage(document, image), 0, 0, 595, 842);
+            }
+            document.save(path.toFile());
+        }
+        return path;
+    }
+
+    @Test
+    void imageOnlyNumbersBecomeNumericChangesWithoutDuplicateVisualHighlights() throws Exception {
+        var ocr = new NumericOcr() {
+            @Override List<String> recognize(List<BufferedImage> crops) {
+                assertThat(crops).hasSize(2);
+                return List.of("83", "84");
+            }
+        };
+        var result = new PdfComparisonEngine(60, ocr).compare(scanned("a.pdf", "83", false),
+                scanned("b.pdf", "84", true), temp, "mixed", true, false, p -> {});
+        assertThat(result.changes()).extracting(ComparisonResult.Change::kind)
+                .containsExactlyInAnyOrder("NUMERIC", "VISUAL");
+        var number = result.changes().stream().filter(c -> c.kind().equals("NUMERIC")).findFirst().orElseThrow();
+        assertThat(number.before()).isEqualTo("83");
+        assertThat(number.after()).isEqualTo("84");
+        assertThat(number.originalBox().x()).isBetween(.07, .1);
+        assertThat(number.revisedBox().y()).isBetween(.09, .13);
+        assertThat(result.warnings()).anyMatch(w -> w.contains("OCR"));
+    }
+
+    @Test
+    void unavailableOcrKeepsVisualDifferencesAndExplainsTheFallback() throws Exception {
+        var ocr = new NumericOcr() {
+            @Override List<String> recognize(List<BufferedImage> crops) throws IOException {
+                throw new IOException("not installed");
+            }
+        };
+        var result = new PdfComparisonEngine(60, ocr).compare(scanned("a.pdf", "83", false),
+                scanned("b.pdf", "84", false), temp, "mixed", true, false, p -> {});
+        assertThat(result.changes()).isNotEmpty().allMatch(c -> c.kind().equals("VISUAL"));
+        assertThat(result.warnings()).anyMatch(w -> w.contains("数値OCRを利用できません"));
+    }
+
+    @Test
+    void visualOnlyModeDoesNotRunOcrAndIdenticalScansHaveNoChanges() throws Exception {
+        var ocr = new NumericOcr() {
+            @Override List<String> recognize(List<BufferedImage> crops) { throw new AssertionError("OCR must not run"); }
+        };
+        var comparing = new PdfComparisonEngine(60, ocr);
+        Path a = scanned("a.pdf", "83", false), b = scanned("b.pdf", "84", false);
+        assertThat(comparing.compare(a, b, temp, "visual", true, false, p -> {}).changes())
+                .isNotEmpty().allMatch(c -> c.kind().equals("VISUAL"));
+        assertThat(comparing.compare(a, a, temp, "mixed", true, false, p -> {}).changes()).isEmpty();
+    }
+
+    @Test
+    void unrecognizedScannedWordsRemainVisualChanges() throws Exception {
+        var ocr = new NumericOcr() {
+            @Override List<String> recognize(List<BufferedImage> crops) { return List.of("ABC", "DEF"); }
+        };
+        var result = new PdfComparisonEngine(60, ocr).compare(scanned("a.pdf", "83", false),
+                scanned("b.pdf", "84", false), temp, "mixed", true, false, p -> {});
+        assertThat(result.changes()).isNotEmpty().allMatch(c -> c.kind().equals("VISUAL"));
+    }
+
+    @Test
+    void numberSyntaxPreservesSignsGroupingAndDecimalsWithoutAcceptingDates() throws Exception {
+        assertThat(NumericOcr.isNumber("-127,728")).isTrue();
+        assertThat(NumericOcr.isNumber("１２３.４５")).isTrue();
+        assertThat(NumericOcr.isNumber("12.5%")).isTrue();
+        assertThat(NumericOcr.isNumber("09/04")).isFalse();
+        assertThat(NumericOcr.isNumber("045-04")).isFalse();
+        assertThat(NumericOcr.isNumber("Amount 1,000")).isFalse();
+        assertThat(NumericOcr.parse(List.of("5\t1\t1\t1\t1\t1\t0\t0\t20\t10\t90\t-127,728"), 2))
+                .containsExactly("-127,728", "");
+        assertThatThrownBy(() -> NumericOcr.parse(List.of("5\t9\t1\t1\t1\t1\t0\t0\t20\t10\t90\t83"), 2))
+                .isInstanceOf(IOException.class);
     }
 
     @Test

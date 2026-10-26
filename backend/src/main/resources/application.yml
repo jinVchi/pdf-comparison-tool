@@ -41,6 +41,10 @@ app:
   max-pages: 60
   retention-hours: 24
   max-active-jobs: 3
+  numeric-ocr:
+    enabled: ${NUMERIC_OCR_ENABLED:true}
+    command: ${TESSERACT_COMMAND:tesseract}
+    timeout-seconds: 45
 logging:
   level:
     org.apache.pdfbox: ERROR

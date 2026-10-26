@@ -872,7 +872,7 @@ function Workspace({ user }: { user: Account }) {
                         </dd>
                     </dl>
                     <div className="info-box">
-                        同じページ番号どうしを比較します。途中へのページ挿入や並び替え、傾きは自動補正されません。OCR・縦書きの読み順補正は含まれていません。
+                        同じページ番号どうしを比較します。途中へのページ挿入や並び替え、傾きは自動補正されません。画像内の印字された数値はOCRで認識します。日本語本文のOCR・縦書きの読み順補正は含まれていません。
                     </div>
                     <button
                         className="primary-button full-width"
@@ -1274,7 +1274,7 @@ function ResultView({ job, back }: { job: Job; back: () => void }) {
                     <small>{result.pages.length}ページを比較</small>
                 </span>
                 <div className="legend">
-                    {(["MODIFIED", "ADDED", "DELETED", "VISUAL"] as Kind[]).map(
+                    {(["MODIFIED", "NUMERIC", "ADDED", "DELETED", "VISUAL"] as Kind[]).map(
                         (k) => (
                             <span key={k}>
                                 <i className={k.toLowerCase()} />
@@ -1691,7 +1691,7 @@ function Help({ start, demo }: { start: () => void; demo: () => void }) {
                     </dd>
                     <dt>スキャンしたPDFは？</dt>
                     <dd>
-                        画像として外観を比較できます。OCRは含まれないため、スキャン画像の文字を差分リストに書き出すことはできません。傾きや解像度の違いも差分になる場合があります。
+                        テキスト＋外観の比較では、印字された数値をOCRで認識し、数値変更として変更前・変更後の値を表示します。日本語本文のOCRには対応していません。低解像度の画像には誤認識の可能性があり、認識できない領域は画像上の差分として残ります。外観のみの比較ではOCRを使いません。傾きや解像度の違いも差分になる場合があります。
                     </dd>
                     <dt>ページの順番が変わった場合は？</dt>
                     <dd>

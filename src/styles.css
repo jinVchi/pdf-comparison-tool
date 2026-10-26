@@ -1760,6 +1760,10 @@ input[type="range"] {
 .change-kind.visual i {
     background: #9a9fcc;
 }
+.legend i.numeric,
+.change-kind.numeric i {
+    background: #4e9cab;
+}
 .result-warnings {
     margin: 7px 0 15px;
 }
@@ -1932,6 +1936,13 @@ input[type="range"] {
 .highlight.visual {
     background: #a2a1d02b;
     border-color: #a2a0cc;
+}
+.highlight.numeric {
+    background: #57b8cc2b;
+    border-color: #4e9cab;
+}
+.highlight.numeric.is-selected {
+    outline-color: #357b8c;
 }
 .highlight.is-selected {
     outline: 2px solid #c39733;
@@ -2109,6 +2120,9 @@ input[type="range"] {
 }
 .change-kind.visual {
     color: #9791b7;
+}
+.change-kind.numeric {
+    color: #357b8c;
 }
 .change-index {
     margin-left: 5px;

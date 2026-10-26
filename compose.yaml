@@ -33,6 +33,7 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-sabun-local}
       JAPANESE_FONT: /usr/share/fonts/opentype/ipafont-gothic/ipag.ttf
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      NUMERIC_OCR_ENABLED: ${NUMERIC_OCR_ENABLED:-true}
     ports: ["127.0.0.1:8080:8080"]
     volumes: ["pdf_data:/app/.data"]
     healthcheck:

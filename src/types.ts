@@ -1,5 +1,5 @@
 export type Mode = "mixed" | "text" | "visual";
-export type Kind = "MODIFIED" | "ADDED" | "DELETED" | "VISUAL";
+export type Kind = "MODIFIED" | "NUMERIC" | "ADDED" | "DELETED" | "VISUAL";
 export interface Box {
     x: number;
     y: number;
@@ -46,6 +46,7 @@ export interface Job {
 }
 export const kindLabels: Record<Kind, string> = {
     MODIFIED: "変更",
+    NUMERIC: "数値変更",
     ADDED: "追加",
     DELETED: "削除",
     VISUAL: "外観",

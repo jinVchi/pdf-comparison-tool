@@ -9,6 +9,7 @@ import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.pdfbox.text.TextPosition;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -22,9 +23,16 @@ import static jp.sabun.comparison.ComparisonResult.*;
 @Component
 class PdfComparisonEngine {
     private final int maxPages;
+    private final NumericOcr numericOcr;
 
-    PdfComparisonEngine(@Value("${app.max-pages:60}") int maxPages) {
+    PdfComparisonEngine(int maxPages) {
+        this(maxPages, new NumericOcr());
+    }
+
+    @Autowired
+    PdfComparisonEngine(@Value("${app.max-pages:60}") int maxPages, NumericOcr numericOcr) {
         this.maxPages = maxPages;
+        this.numericOcr = numericOcr;
     }
 
     void validate(Path path) throws IOException {
@@ -68,15 +76,26 @@ class PdfComparisonEngine {
                 } else {
                     List<Span> sa = mode.equals("visual") ? List.of() : extract(a, i),
                             sb = mode.equals("visual") ? List.of() : extract(b, i);
-                    if (!mode.equals("visual") && (sa.isEmpty() || sb.isEmpty()))
-                        warnings.add("テキストを抽出できないページがあります。スキャン画像は外観比較をご利用ください。OCRは含まれていません。");
-                    if (!mode.equals("visual"))
+                    boolean scanned = !mode.equals("visual") && ((sa.isEmpty() && NumericOcr.hasImages(a.getPage(i)))
+                            || (sb.isEmpty() && NumericOcr.hasImages(b.getPage(i))));
+                    List<Change> numbers = List.of();
+                    if (scanned) {
+                        warnings.add("画像内の数値はOCRで認識しています。誤認識や未認識の可能性があるため、原本の数値も確認してください。画像内の日本語本文は文字比較の対象外です。");
+                        try {
+                            numbers = numericOcr.compare(NumericOcr.scan(a.getPage(i), ia), NumericOcr.scan(b.getPage(i), ib), i + 1);
+                            for (Change number : numbers)
+                                changes.add(new Change("c" + changes.size(), number.page(), number.kind(), number.before(),
+                                        number.after(), number.originalBox(), number.revisedBox()));
+                        } catch (IOException e) {
+                            warnings.add("数値OCRを利用できませんでした。外観を含む比較では、未認識の領域を画像の差分として表示します。");
+                        }
+                    } else if (!mode.equals("visual"))
                         textChanges(sa, sb, aw, ah, bw, bh, i + 1, ignoreWhitespace, normalizeWidth, changes);
                     if (!mode.equals("text")) {
-                        if (mode.equals("mixed"))
+                        if (mode.equals("mixed") && !scanned)
                             positionChanges(sa, sb, aw, ah, bw, bh, i + 1, ignoreWhitespace, normalizeWidth, changes);
-                        visualChanges(ia, ib, i + 1, changes, mode.equals("mixed") ? sa : List.of(),
-                                mode.equals("mixed") ? sb : List.of(), aw, ah, bw, bh);
+                        visualChanges(ia, ib, i + 1, changes, mode.equals("mixed") && !scanned ? sa : List.of(),
+                                mode.equals("mixed") && !scanned ? sb : List.of(), aw, ah, bw, bh, numbers);
                     }
                     if (Math.abs(aw - bw) > 1 || Math.abs(ah - bh) > 1)
                         warnings.add("ページサイズが異なります。プレビューは各ページの比率で表示しています。");
@@ -175,7 +194,8 @@ class PdfComparisonEngine {
             for (int n = 0; n < Math.max(na, nb); n++) {
                 Span sa = n < na ? a.get(delta.getSource().getPosition() + n) : null;
                 Span sb = n < nb ? b.get(delta.getTarget().getPosition() + n) : null;
-                out.add(new Change("c" + out.size(), page, sa == null ? "ADDED" : sb == null ? "DELETED" : "MODIFIED",
+                out.add(new Change("c" + out.size(), page, sa == null ? "ADDED" : sb == null ? "DELETED"
+                        : NumericOcr.isNumber(sa.text) && NumericOcr.isNumber(sb.text) ? "NUMERIC" : "MODIFIED",
                         sa == null ? "" : sa.text, sb == null ? "" : sb.text, sa == null ? null : sa.box(aw, ah),
                         sb == null ? null : sb.box(bw, bh)));
             }
@@ -219,13 +239,17 @@ class PdfComparisonEngine {
     }
 
     private static void visualChanges(BufferedImage a, BufferedImage b, int page, List<Change> out, List<Span> sa,
-            List<Span> sb, double aw, double ah, double bw, double bh) {
+            List<Span> sb, double aw, double ah, double bw, double bh, List<Change> numbers) {
         int w = Math.max(a.getWidth(), b.getWidth()), h = Math.max(a.getHeight(), b.getHeight()), tile = 16;
         int cols = (w + tile - 1) / tile, rows = (h + tile - 1) / tile;
         boolean[][] changed = new boolean[rows][cols];
         boolean[] ignored = new boolean[w * h];
         mask(ignored, w, h, sa, aw, ah);
         mask(ignored, w, h, sb, bw, bh);
+        for (Change number : numbers) {
+            maskBox(ignored, w, h, number.originalBox());
+            maskBox(ignored, w, h, number.revisedBox());
+        }
         for (int gy = 0; gy < rows; gy++)
             for (int gx = 0; gx < cols; gx++) {
                 int differences = 0;
@@ -270,9 +294,18 @@ class PdfComparisonEngine {
                     Box box = new Box((double) minX * tile / w, (double) minY * tile / h,
                             Math.min(1, (double) (maxX - minX + 1) * tile / w),
                             Math.min(1, (double) (maxY - minY + 1) * tile / h));
-                    out.add(new Change("c" + out.size(), page, "VISUAL", "外観・レイアウト", "外観・レイアウトの変更", box, box));
+                    out.add(new Change("c" + out.size(), page, "VISUAL", "画像上の差分（変更前）", "画像上の差分（変更後）", box, box));
                     if (out.size() > 10000)
                         throw new IllegalArgumentException("差分が多すぎます。比較範囲を小さくしてください。");
                 }
+    }
+
+    private static void maskBox(boolean[] mask, int w, int h, Box box) {
+        if (box == null) return;
+        int left = Math.max(0, (int) Math.floor(box.x() * w) - 1);
+        int right = Math.min(w, (int) Math.ceil((box.x() + box.width()) * w) + 1);
+        int top = Math.max(0, (int) Math.floor(box.y() * h) - 1);
+        int bottom = Math.min(h, (int) Math.ceil((box.y() + box.height()) * h) + 1);
+        for (int y = top; y < bottom; y++) Arrays.fill(mask, y * w + left, y * w + right, true);
     }
 }
