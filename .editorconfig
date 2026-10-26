@@ -1,0 +1,13 @@
+root = true
+
+[src/**]
+indent_style = space
+indent_size = 2
+
+[{vite.config.ts,tsconfig.json,index.html,package.json,package-lock.json,public/**}]
+indent_style = space
+indent_size = 2
+
+[backend/**/*.java]
+indent_style = space
+indent_size = 4
