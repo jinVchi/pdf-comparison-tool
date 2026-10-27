@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { CircleHelp, X } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 import { signOut } from "../auth/api";
-import { submit, validatePdf } from "../comparison/api";
+import { validatePdf } from "../comparison/api";
 import ComparisonSettingsModal from "../comparison/ComparisonSettingsModal";
+import { useJobs } from "../comparison/jobsStore";
 import NewComparisonPage from "../comparison/NewComparisonPage";
 import type {
   ComparisonFiles,
@@ -15,7 +17,6 @@ import HelpPage from "../help/HelpPage";
 import DeleteComparisonModal from "../history/DeleteComparisonModal";
 import HistoryPage from "../history/HistoryPage";
 import ResultView from "../result/ResultView";
-import { api } from "../shared/api";
 import type { Account } from "../shared/api";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
@@ -30,52 +31,33 @@ export default function Workspace({ user }: { user: Account }) {
     ignoreWhitespace: true,
     normalizeWidth: false,
   });
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [job, setJob] = useState<Job | null>(null);
-  const [connected, setConnected] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const { jobs, job, connected, loading, error } = useJobs(
+    useShallow(({ jobs, job, connected, loading, error }) => ({
+      jobs,
+      job,
+      connected,
+      loading,
+      error,
+    })),
+  );
+  const { connect, refresh, start, openJob, closeJob, remove, setError, reset } =
+    useJobs.getState();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Job | null>(null);
   const [signingOut, setSigningOut] = useState(false);
 
-  const connect = useCallback(async () => {
-    try {
-      setJobs(await api<Job[]>("/comparisons"));
-      setConnected(true);
-      setError("");
-    } catch (e) {
-      setConnected(false);
-      setError((e as Error).message);
-    }
-  }, []);
   useEffect(() => {
     void connect();
-  }, [connect]);
+    // The store outlives this account's workspace, so drop its jobs on the way out.
+    return reset;
+  }, [connect, reset]);
+  const polling =
+    connected && (jobs.some(isActive) || (job !== null && isActive(job)));
   useEffect(() => {
-    if (!connected || (!jobs.some(isActive) && (!job || !isActive(job))))
-      return;
-    let cancelled = false;
-    const timer = window.setInterval(async () => {
-      try {
-        const [list, detail] = await Promise.all([
-          api<Job[]>("/comparisons"),
-          job && isActive(job)
-            ? api<Job>(`/comparisons/${job.id}`)
-            : Promise.resolve(null),
-        ]);
-        if (cancelled) return;
-        setJobs(list);
-        if (detail) setJob(detail);
-      } catch (e) {
-        if (!cancelled) setError((e as Error).message);
-      }
-    }, 2000);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [connected, job, jobs.some(isActive)]);
+    if (!polling) return;
+    const timer = window.setInterval(() => void refresh(), 2000);
+    return () => clearInterval(timer);
+  }, [polling, refresh]);
 
   async function choose(index: number, incoming: File[]) {
     if (!incoming.length) return;
@@ -101,70 +83,32 @@ export default function Workspace({ user }: { user: Account }) {
     });
     setError("");
   }
-  async function start(demo = false) {
-    if (!demo && (!files[0] || !files[1])) return;
-    setLoading(true);
-    setError("");
-    try {
-      const created = demo
-        ? await api<Job>("/comparisons/demo", { method: "POST" })
-        : await submit(
-            files[0]!,
-            files[1]!,
-            options.mode,
-            options.ignoreWhitespace,
-            options.normalizeWidth,
-          );
-      setConnected(true);
-      setJob(created);
-      setView("new");
-      setJobs((current) => [created, ...current]);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
+  async function startComparison(demo = false) {
+    const [original, revised] = files;
+    if (!demo && (!original || !revised)) return;
+    const started = await start(
+      demo ? "demo" : { files: [original!, revised!], options },
+    );
+    if (started) setView("new");
   }
-  async function openJob(j: Job) {
-    setLoading(true);
-    setError("");
-    try {
-      setJob(await api<Job>(`/comparisons/${j.id}`));
-      setView("new");
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
+  async function open(j: Job) {
+    if (await openJob(j)) setView("new");
   }
-  async function remove() {
+  async function confirmRemove() {
     if (!deleteTarget) return;
-    try {
-      await api(`/comparisons/${deleteTarget.id}`, { method: "DELETE" });
-      setJobs((current) =>
-        current.filter((j) => j.id !== deleteTarget.id),
-      );
-      if (job?.id === deleteTarget.id) setJob(null);
-      setDeleteTarget(null);
-    } catch (e) {
-      setError((e as Error).message);
-      setDeleteTarget(null);
-    }
+    await remove(deleteTarget);
+    setDeleteTarget(null);
   }
   function navigate(next: View) {
     setView(next);
-    setJob(null);
+    closeJob();
     setError("");
-    if (connected)
-      void api<Job[]>("/comparisons")
-        .then(setJobs)
-        .catch((e) => setError(e.message));
+    if (connected) void refresh();
   }
 
   async function logout() {
     setSigningOut(true);
-    setJob(null);
-    setJobs([]);
+    reset();
     setDeleteTarget(null);
     setFiles([null, null]);
     try {
@@ -228,11 +172,11 @@ export default function Workspace({ user }: { user: Account }) {
               options={options}
               setOptions={setOptions}
               loading={loading}
-              start={() => void start()}
-              demo={() => void start(true)}
+              start={() => void startComparison()}
+              demo={() => void startComparison(true)}
               openSettings={() => setSettingsOpen(true)}
               recentJobs={jobs.slice(0, 3)}
-              openJob={openJob}
+              openJob={open}
               removeJob={setDeleteTarget}
               showHistory={() => navigate("history")}
             />
@@ -240,14 +184,14 @@ export default function Workspace({ user }: { user: Account }) {
           {view === "new" &&
             job &&
             (job.status === "COMPLETED" && job.result ? (
-              <ResultView job={job} back={() => setJob(null)} />
+              <ResultView job={job} back={closeJob} />
             ) : (
-              <ProcessingView job={job} back={() => setJob(null)} />
+              <ProcessingView job={job} back={closeJob} />
             ))}
           {view === "history" && (
             <HistoryPage
               jobs={jobs}
-              open={openJob}
+              open={open}
               remove={setDeleteTarget}
               startNew={() => navigate("new")}
             />
@@ -255,7 +199,7 @@ export default function Workspace({ user }: { user: Account }) {
           {view === "help" && (
             <HelpPage
               start={() => navigate("new")}
-              demo={() => void start(true)}
+              demo={() => void startComparison(true)}
             />
           )}
         </main>
@@ -268,7 +212,7 @@ export default function Workspace({ user }: { user: Account }) {
         <DeleteComparisonModal
           job={deleteTarget}
           cancel={() => setDeleteTarget(null)}
-          confirm={() => void remove()}
+          confirm={() => void confirmRemove()}
         />
       )}
     </div>
