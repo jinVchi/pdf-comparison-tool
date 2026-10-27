@@ -19,7 +19,8 @@ describe("account API session transitions", () => {
       .mockResolvedValueOnce(response(session("account-token", account)))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetcher);
-    const { authenticate, api } = await import("./api");
+    const { authenticate } = await import("./api");
+    const { api } = await import("../shared/api");
     await expect(authenticate("sign-up", account.email, "secure-password-123")).resolves.toEqual(account);
     expect(fetcher.mock.calls[1][0]).toBe("/api/auth/sign-up");
     const registration = fetcher.mock.calls[1][1];
@@ -38,7 +39,8 @@ describe("account API session transitions", () => {
       .mockResolvedValueOnce(response(session("new-guest-token")))
       .mockResolvedValueOnce(response([]));
     vi.stubGlobal("fetch", fetcher);
-    const { initialize, signOut, api } = await import("./api");
+    const { signOut } = await import("./api");
+    const { initialize, api } = await import("../shared/api");
     expect((await initialize()).user).toEqual(account);
     await signOut();
     expect(fetcher.mock.calls[1][0]).toBe("/api/auth/sign-out");
@@ -54,7 +56,7 @@ describe("account API session transitions", () => {
       .mockResolvedValueOnce(response(session("account-token", account)))
       .mockResolvedValueOnce(response({ message: "ログインしてからご利用ください。" }, 401));
     vi.stubGlobal("fetch", fetcher);
-    const { api, SESSION_EXPIRED_EVENT } = await import("./api");
+    const { api, SESSION_EXPIRED_EVENT } = await import("../shared/api");
     await expect(api("/comparisons")).rejects.toThrow("ログインしてからご利用ください。");
     expect(dispatchEvent).toHaveBeenCalledTimes(1);
     expect(dispatchEvent.mock.calls[0][0].type).toBe(SESSION_EXPIRED_EVENT);

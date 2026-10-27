@@ -44,6 +44,8 @@ export interface Job {
   error: string | null;
   result?: Result;
 }
+export const isActive = (j: Job) =>
+  j.status === "QUEUED" || j.status === "PROCESSING";
 export const kindLabels: Record<Kind, string> = {
   MODIFIED: "変更",
   NUMERIC: "数値変更",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fileSize, validatePdf } from "./api";
+import { validatePdf } from "./api";
 describe("PDF upload validation", () => {
   it("accepts PDF files by extension and header", async () => {
     expect(
@@ -25,9 +25,5 @@ describe("PDF upload validation", () => {
         new File([new Uint8Array(25 * 1024 * 1024 + 1)], "large.pdf"),
       ),
     ).toContain("25MB");
-  });
-  it("formats sizes clearly", () => {
-    expect(fileSize(1024)).toBe("1 KB");
-    expect(fileSize(2 * 1024 * 1024)).toBe("2.0 MB");
   });
 });

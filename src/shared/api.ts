@@ -1,4 +1,3 @@
-import type { Job, Mode } from "./types";
 export type Account = { id: string; email: string };
 export type Session = {
   csrfToken: string;
@@ -45,23 +44,12 @@ export function initialize(): Promise<Session> {
   return initializing;
 }
 
-export async function authenticate(mode: "sign-in" | "sign-up", email: string, password: string) {
-  const account = await api<Account>(`/auth/${mode}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-  // Authentication rotates the session ID and invalidates its old CSRF token.
+/** Drops the cached CSRF token so the next request fetches the rotated session. */
+export async function forgetSession() {
   if (initializing) await initializing.catch(() => {});
   csrf = undefined;
-  return account;
 }
 
-export async function signOut() {
-  await api<void>("/auth/sign-out", { method: "POST" });
-  if (initializing) await initializing.catch(() => {});
-  csrf = undefined;
-}
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!csrf) await initialize();
   const headers = new Headers(init.headers);
@@ -94,42 +82,4 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     );
   }
   return res.status === 204 ? (undefined as T) : await res.json();
-}
-export async function validatePdf(file: File): Promise<string | null> {
-  if (file.size === 0 || file.size > 25 * 1024 * 1024)
-    return "PDFは1ファイル25MB以内にしてください。";
-  if (!file.name.toLowerCase().endsWith(".pdf"))
-    return "PDFファイルを選択してください。";
-  const header = await file.slice(0, 5).text();
-  return header === "%PDF-"
-    ? null
-    : "このファイルは有効なPDFではありません。";
-}
-export function submit(
-  original: File,
-  revised: File,
-  mode: Mode,
-  ignoreWhitespace: boolean,
-  normalizeWidth: boolean,
-) {
-  const form = new FormData();
-  form.append("original", original);
-  form.append("revised", revised);
-  form.append("mode", mode);
-  form.append("ignoreWhitespace", String(ignoreWhitespace));
-  form.append("normalizeWidth", String(normalizeWidth));
-  return api<Job>("/comparisons", { method: "POST", body: form });
-}
-export function fileSize(n: number) {
-  return n < 1024 * 1024
-    ? `${Math.max(1, Math.round(n / 1024))} KB`
-    : `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
-export function dateLabel(value: string) {
-  return new Intl.DateTimeFormat("ja-JP", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
 }

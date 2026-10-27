@@ -157,7 +157,15 @@ Backend tests cover unchanged documents, numeric changes and coordinates, scanne
 ## Repository map
 
 ```text
-src/                  React UI, API client, types, CSS, upload tests
+src/
+  main.tsx              React entry point
+  app/                  Session gate, workspace shell (sidebar, top bar) and global CSS
+  auth/                 Login home page, sign-in/up form and auth API calls
+  comparison/           New comparison form, upload, processing state, job types and API
+  result/               Side-by-side/overlay result viewer and change list
+  history/              Comparison history list and deletion
+  help/                 Usage guide page
+  shared/               API client with session/CSRF handling, modal, formatting helpers
 backend/src/main/java/jp/sabun/
   SabunApplication.java  Spring Boot entry point; scans all feature packages
   auth/                 Registration, sign-in/out, sessions, account identity and persistence

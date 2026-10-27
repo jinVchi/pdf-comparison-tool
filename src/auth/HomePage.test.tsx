@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import App from "./App";
+import App from "../app/App";
 import HomePage from "./HomePage";
 
 describe("login home page", () => {
