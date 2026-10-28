@@ -26,6 +26,17 @@ public interface JobRepository extends JpaRepository<ComparisonJob, UUID> {
     @Query("update ComparisonJob j set j.status = 'PROCESSING', j.updatedAt = :now where j.id = :id and j.status = 'QUEUED'")
     int claim(@Param("id") UUID id, @Param("now") Instant now);
 
+    @Modifying
+    @Transactional
+    @Query("update ComparisonJob j set j.status = 'QUEUED', j.progress = 0, j.pageCount = 0, j.changeCount = 0, j.errorMessage = null, j.resultJson = null, j.dispatchedAt = null, j.updatedAt = :now where j.id = :id and j.status = 'FAILED'")
+    int requeue(@Param("id") UUID id, @Param("now") Instant now);
+
+    // Conditional so it cannot race a worker's claim: whichever runs first makes the other a no-op.
+    @Modifying
+    @Transactional
+    @Query("delete from ComparisonJob j where j.id = :id and j.status = 'QUEUED'")
+    int cancel(@Param("id") UUID id);
+
     List<ComparisonJob> findByUpdatedAtBeforeAndStatus(Instant cutoff, ComparisonJob.Status status);
 
     List<ComparisonJob> findByCreatedAtBeforeAndStatusIn(Instant cutoff, Collection<ComparisonJob.Status> statuses);

@@ -175,6 +175,30 @@ class ComparisonController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/comparisons/{id}/retry")
+    ResponseEntity<?> retry(@PathVariable UUID id, HttpSession session) {
+        synchronized (session) {
+            var j = owned(id, session);
+            if (j.status != ComparisonJob.Status.FAILED)
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "再実行できるのはエラーになった比較だけです。");
+            if (!Files.exists(files.file(id, "original.pdf")) || !Files.exists(files.file(id, "revised.pdf")))
+                throw new ResponseStatusException(HttpStatus.GONE, "アップロードしたPDFが残っていないため再実行できません。もう一度アップロードしてください。");
+            checkLimit(owner(session));
+            if (jobs.requeue(id, Instant.now()) == 0)
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "再実行できるのはエラーになった比較だけです。");
+            return ResponseEntity.accepted().body(summary(owned(id, session)));
+        }
+    }
+
+    @PostMapping("/comparisons/{id}/cancel")
+    ResponseEntity<?> cancel(@PathVariable UUID id, HttpSession session) throws IOException {
+        owned(id, session);
+        if (jobs.cancel(id) == 0)
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "比較がすでに始まっているため取り消せません。");
+        files.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/comparisons/{id}/pages/{side}/{page}")
     ResponseEntity<?> page(@PathVariable UUID id, @PathVariable String side, @PathVariable int page,
             HttpSession session) {

@@ -3,6 +3,7 @@ import {
   FileDiff,
   FolderClock,
   Layers,
+  ListChecks,
   LockKeyhole,
   Settings2,
   Sparkles,
@@ -15,12 +16,14 @@ export default function Sidebar({
   user,
   view,
   jobCount,
+  activeCount,
   navigate,
   openSettings,
 }: {
   user: Account;
   view: View;
   jobCount: number;
+  activeCount: number;
   navigate: (view: View) => void;
   openSettings: () => void;
 }) {
@@ -51,6 +54,18 @@ export default function Sidebar({
         >
           <Layers size={18} />
           PDFを比較<span className="nav-shortcut">＋</span>
+        </button>
+        <button
+          className={view === "jobs" ? "nav-item selected" : "nav-item"}
+          onClick={() => navigate("jobs")}
+        >
+          <ListChecks size={18} />
+          ジョブ一覧
+          {activeCount > 0 && (
+            <span className="nav-count" title="待機中・比較中">
+              {activeCount}
+            </span>
+          )}
         </button>
         <button
           className={

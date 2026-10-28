@@ -9,12 +9,21 @@ import {
 import type { Job } from "./types";
 import { isActive, statusLabels } from "./types";
 
-export default function ProcessingView({ job, back }: { job: Job; back: () => void }) {
+/** `backLabel` names where `back` leads when that is not the new comparison page. */
+export default function ProcessingView({
+  job,
+  back,
+  backLabel,
+}: {
+  job: Job;
+  back: () => void;
+  backLabel?: string;
+}) {
   return (
     <div className="processing-section">
       <button className="text-button" onClick={back}>
         <ArrowLeft size={16} />
-        新しい比較へ
+        {backLabel ?? "新しい比較へ"}
       </button>
       <div className="processing-card">
         <div
@@ -88,9 +97,10 @@ export default function ProcessingView({ job, back }: { job: Job; back: () => vo
           </>
         )}
         <button className="secondary-button" onClick={back}>
-          {job.status === "FAILED"
-            ? "ファイルを選び直す"
-            : "別のPDFを比較する"}
+          {backLabel ??
+            (job.status === "FAILED"
+              ? "ファイルを選び直す"
+              : "別のPDFを比較する")}
           <ArrowRight size={16} />
         </button>
       </div>

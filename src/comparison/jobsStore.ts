@@ -25,6 +25,10 @@ type JobsState = {
   openJob: (job: Job) => Promise<boolean>;
   closeJob: () => void;
   remove: (job: Job) => Promise<void>;
+  /** Queues a failed job again with the PDFs it was uploaded with. */
+  retry: (job: Job) => Promise<void>;
+  /** Withdraws a job that no worker has picked up yet. */
+  cancel: (job: Job) => Promise<void>;
   setError: (error: string) => void;
   /** Forgets everything loaded for the current account. */
   reset: () => void;
@@ -101,6 +105,31 @@ export const useJobs = create<JobsState>()((set, get) => ({
       }));
     } catch (e) {
       set({ error: (e as Error).message });
+    }
+  },
+  async retry(target) {
+    try {
+      const queued = await api<Job>(`/comparisons/${target.id}/retry`, { method: "POST" });
+      set((s) => ({
+        jobs: s.jobs.map((j) => (j.id === queued.id ? queued : j)),
+        job: s.job?.id === queued.id ? queued : s.job,
+      }));
+    } catch (e) {
+      set({ error: (e as Error).message });
+    }
+  },
+  async cancel(target) {
+    try {
+      await api(`/comparisons/${target.id}/cancel`, { method: "POST" });
+      set((s) => ({
+        jobs: s.jobs.filter((j) => j.id !== target.id),
+        job: s.job?.id === target.id ? null : s.job,
+      }));
+    } catch (e) {
+      const error = (e as Error).message;
+      // A worker may have claimed it first; show its real state instead of the stale "pending".
+      await get().refresh();
+      set({ error });
     }
   },
   setError: (error) => set({ error }),

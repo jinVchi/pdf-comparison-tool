@@ -28,7 +28,9 @@ export default function Topbar({
               ? "使い方ガイド"
               : viewingJob
                 ? "比較結果"
-                : "PDFを比較"}
+                : view === "jobs"
+                  ? "ジョブ一覧"
+                  : "PDFを比較"}
         </span>
       </div>
       <div className="header-right">

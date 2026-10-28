@@ -79,6 +79,53 @@ describe("jobs store", () => {
     expect(jobs().job).toBeNull();
   });
 
+  it("retries a failed job and shows it queued in place", async () => {
+    const { jobs, fetcher } = await storeWith(
+      response([job("a"), job("b", "FAILED")]),
+      response({ ...job("b", "QUEUED"), progress: 0 }, 202),
+    );
+    await jobs().connect();
+    await jobs().retry(job("b", "FAILED"));
+    expect(fetcher.mock.calls[2][0]).toBe("/api/comparisons/b/retry");
+    expect(fetcher.mock.calls[2][1].method).toBe("POST");
+    expect(jobs().jobs.map((j) => [j.id, j.status])).toEqual([["a", "COMPLETED"], ["b", "QUEUED"]]);
+  });
+
+  it("keeps a failed job as it was when the retry is refused", async () => {
+    const { jobs } = await storeWith(
+      response([job("b", "FAILED")]),
+      response({ message: "同時に実行できる比較は3件です。" }, 429),
+    );
+    await jobs().connect();
+    await jobs().retry(job("b", "FAILED"));
+    expect(jobs().jobs[0].status).toBe("FAILED");
+    expect(jobs().error).toBe("同時に実行できる比較は3件です。");
+  });
+
+  it("cancels a pending job by removing it from the list", async () => {
+    const { jobs, fetcher } = await storeWith(
+      response([job("a", "QUEUED"), job("b")]),
+      new Response(null, { status: 204 }),
+    );
+    await jobs().connect();
+    await jobs().cancel(job("a", "QUEUED"));
+    expect(fetcher.mock.calls[2][0]).toBe("/api/comparisons/a/cancel");
+    expect(fetcher.mock.calls[2][1].method).toBe("POST");
+    expect(jobs().jobs.map((j) => j.id)).toEqual(["b"]);
+  });
+
+  it("reloads the list when a job started before it could be canceled", async () => {
+    const { jobs } = await storeWith(
+      response([job("a", "QUEUED")]),
+      response({ message: "比較がすでに始まっているため取り消せません。" }, 409),
+      response([job("a", "PROCESSING")]),
+    );
+    await jobs().connect();
+    await jobs().cancel(job("a", "QUEUED"));
+    expect(jobs().error).toBe("比較がすでに始まっているため取り消せません。");
+    expect(jobs().jobs[0].status).toBe("PROCESSING");
+  });
+
   it("starts a comparison, lists it first and opens it", async () => {
     const { jobs, fetcher } = await storeWith(response([job("old")]), response(job("new", "QUEUED"), 201));
     await jobs().connect();

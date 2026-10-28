@@ -1,0 +1,85 @@
+.job-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #eaf0e3;
+}
+.job-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #65715e;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.job-filter:hover {
+  background: #f0f4e8;
+}
+.job-filter.selected {
+  color: var(--green);
+  border-color: #b9cfa0;
+  background: #f0f5e7;
+}
+.job-result-row {
+  gap: 13px;
+  padding: 13px 4px;
+}
+.job-detail {
+  font-size: 9px;
+  color: #99a28f;
+  width: 150px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.job-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.job-error {
+  color: #a2695d;
+}
+.job-action {
+  width: 108px;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+.job-action .secondary-button {
+  font-size: 10px;
+  padding: 6px 10px;
+  gap: 5px;
+}
+.job-action .secondary-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.job-action .cancel-job:hover {
+  color: #ad6551;
+  background: #fbefea;
+}
+
+@media (max-width: 720px) {
+  .job-result-row {
+    flex-wrap: wrap;
+    gap: 8px 10px;
+  }
+  .job-result-row .job-names {
+    flex-basis: calc(100% - 50px);
+  }
+  .job-result-row .job-date {
+    display: none;
+  }
+  .job-detail {
+    flex: 1;
+    width: auto;
+  }
+  .job-action {
+    width: auto;
+  }
+}

@@ -20,7 +20,16 @@ import type { Change, Job, Kind } from "../comparison/types";
 import { kindLabels } from "../comparison/types";
 import PageImage from "./PageImage";
 
-export default function ResultView({ job, back }: { job: Job; back: () => void }) {
+/** `backLabel` names where `back` leads when that is not the new comparison page. */
+export default function ResultView({
+  job,
+  back,
+  backLabel = "新しい比較",
+}: {
+  job: Job;
+  back: () => void;
+  backLabel?: string;
+}) {
   const result = job.result!;
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<string | null>(
@@ -66,7 +75,7 @@ export default function ResultView({ job, back }: { job: Job; back: () => void }
         <div>
           <button className="back-button" onClick={back}>
             <ArrowLeft size={15} />
-            新しい比較
+            {backLabel}
           </button>
           <h1>
             比較結果{" "}

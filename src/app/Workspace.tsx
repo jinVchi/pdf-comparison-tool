@@ -16,12 +16,14 @@ import { isActive } from "../comparison/types";
 import HelpPage from "../help/HelpPage";
 import DeleteComparisonModal from "../history/DeleteComparisonModal";
 import HistoryPage from "../history/HistoryPage";
+import CancelJobModal from "../jobs/CancelJobModal";
+import JobsPage from "../jobs/JobsPage";
 import ResultView from "../result/ResultView";
 import type { Account } from "../shared/api";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 
-export type View = "new" | "history" | "help";
+export type View = "new" | "jobs" | "history" | "help";
 
 export default function Workspace({ user }: { user: Account }) {
   const [view, setView] = useState<View>("new");
@@ -40,10 +42,11 @@ export default function Workspace({ user }: { user: Account }) {
       error,
     })),
   );
-  const { connect, refresh, start, openJob, closeJob, remove, setError, reset } =
+  const { connect, refresh, start, openJob, closeJob, remove, retry, cancel, setError, reset } =
     useJobs.getState();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Job | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<Job | null>(null);
   const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
@@ -51,6 +54,7 @@ export default function Workspace({ user }: { user: Account }) {
     // The store outlives this account's workspace, so drop its jobs on the way out.
     return reset;
   }, [connect, reset]);
+  const backLabel = view === "jobs" ? "ジョブ一覧へ戻る" : undefined;
   const polling =
     connected && (jobs.some(isActive) || (job !== null && isActive(job)));
   useEffect(() => {
@@ -92,7 +96,13 @@ export default function Workspace({ user }: { user: Account }) {
     if (started) setView("new");
   }
   async function open(j: Job) {
-    if (await openJob(j)) setView("new");
+    // The jobs page shows the job in place, so going back returns to the list.
+    if ((await openJob(j)) && view !== "jobs") setView("new");
+  }
+  async function confirmCancel() {
+    if (!cancelTarget) return;
+    await cancel(cancelTarget);
+    setCancelTarget(null);
   }
   async function confirmRemove() {
     if (!deleteTarget) return;
@@ -110,6 +120,7 @@ export default function Workspace({ user }: { user: Account }) {
     setSigningOut(true);
     reset();
     setDeleteTarget(null);
+    setCancelTarget(null);
     setFiles([null, null]);
     try {
       await signOut();
@@ -127,6 +138,7 @@ export default function Workspace({ user }: { user: Account }) {
         user={user}
         view={view}
         jobCount={jobs.length}
+        activeCount={jobs.filter(isActive).length}
         navigate={navigate}
         openSettings={() => setSettingsOpen(true)}
       />
@@ -181,13 +193,22 @@ export default function Workspace({ user }: { user: Account }) {
               showHistory={() => navigate("history")}
             />
           )}
-          {view === "new" &&
+          {(view === "new" || view === "jobs") &&
             job &&
             (job.status === "COMPLETED" && job.result ? (
-              <ResultView job={job} back={closeJob} />
+              <ResultView job={job} back={closeJob} backLabel={backLabel} />
             ) : (
-              <ProcessingView job={job} back={closeJob} />
+              <ProcessingView job={job} back={closeJob} backLabel={backLabel} />
             ))}
+          {view === "jobs" && !job && (
+            <JobsPage
+              jobs={jobs}
+              open={open}
+              retry={retry}
+              cancel={setCancelTarget}
+              startNew={() => navigate("new")}
+            />
+          )}
           {view === "history" && (
             <HistoryPage
               jobs={jobs}
@@ -207,6 +228,13 @@ export default function Workspace({ user }: { user: Account }) {
       {signingOut && <div className="modal-backdrop" role="status"><div className="modal">ログアウト中…</div></div>}
       {settingsOpen && (
         <ComparisonSettingsModal close={() => setSettingsOpen(false)} />
+      )}
+      {cancelTarget && (
+        <CancelJobModal
+          job={cancelTarget}
+          close={() => setCancelTarget(null)}
+          confirm={() => void confirmCancel()}
+        />
       )}
       {deleteTarget && (
         <DeleteComparisonModal
