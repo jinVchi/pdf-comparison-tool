@@ -27,7 +27,7 @@ export default function Header({
 }) {
   return (
     <header className="header">
-      <strong>差分</strong>
+      <strong className="brand">差分</strong>
       <nav aria-label="メインナビゲーション">
         {links.map((l) => (
           <button

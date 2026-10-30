@@ -47,52 +47,56 @@ export default function JobsPage({
         ))}
       </div>
       {shown.length ? (
-        <table>
-          <thead>
-            <tr>
-              <th>ファイル</th>
-              <th>日時</th>
-              <th>状態</th>
-              <th>詳細</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((j) => (
-              <tr key={j.id}>
-                <td>
-                  {j.originalName} → {j.revisedName}
-                </td>
-                <td>{dateLabel(j.createdAt)}</td>
-                <td>{statusLabels[j.status]}</td>
-                <td>
-                  <JobDetail job={j} />
-                </td>
-                <td>
-                  {j.status === "COMPLETED" && (
-                    <button onClick={() => open(j)}>結果を見る</button>
-                  )}
-                  {j.status === "PROCESSING" && (
-                    <button onClick={() => open(j)}>進捗を見る</button>
-                  )}
-                  {j.status === "FAILED" && (
-                    <button
-                      disabled={retrying === j.id}
-                      onClick={() => void retryJob(j)}
-                    >
-                      再実行
-                    </button>
-                  )}
-                  {j.status === "QUEUED" && (
-                    <button onClick={() => cancel(j)}>取り消す</button>
-                  )}
-                </td>
+        <div className="panel table-panel">
+          <table>
+            <thead>
+              <tr>
+                <th>ファイル</th>
+                <th>日時</th>
+                <th>状態</th>
+                <th>詳細</th>
+                <th />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {shown.map((j) => (
+                <tr key={j.id}>
+                  <td>
+                    {j.originalName} → {j.revisedName}
+                  </td>
+                  <td>{dateLabel(j.createdAt)}</td>
+                  <td className={"status " + j.status.toLowerCase()}>
+                    {statusLabels[j.status]}
+                  </td>
+                  <td>
+                    <JobDetail job={j} />
+                  </td>
+                  <td>
+                    {j.status === "COMPLETED" && (
+                      <button onClick={() => open(j)}>結果を見る</button>
+                    )}
+                    {j.status === "PROCESSING" && (
+                      <button onClick={() => open(j)}>進捗を見る</button>
+                    )}
+                    {j.status === "FAILED" && (
+                      <button
+                        disabled={retrying === j.id}
+                        onClick={() => void retryJob(j)}
+                      >
+                        再実行
+                      </button>
+                    )}
+                    {j.status === "QUEUED" && (
+                      <button onClick={() => cancel(j)}>取り消す</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : (
-        <p className="muted">
+        <p className="panel muted">
           {jobs.length
             ? "該当する比較はありません"
             : "まだ比較ジョブがありません"}
