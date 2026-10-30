@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
 
 export default function Modal({
   title,
@@ -64,12 +63,8 @@ export default function Modal({
       >
         <div className="modal-heading">
           <h2>{title}</h2>
-          <button
-            className="icon-button"
-            onClick={close}
-            aria-label="閉じる"
-          >
-            <X size={19} />
+          <button onClick={close} aria-label="閉じる">
+            ×
           </button>
         </div>
         {children}

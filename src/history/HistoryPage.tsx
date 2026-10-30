@@ -1,60 +1,59 @@
-import { ArrowRight, FolderClock, Plus } from "lucide-react";
 import type { Job } from "../comparison/types";
-import JobList from "./JobList";
+import { isActive, statusLabels } from "../comparison/types";
+import { dateLabel } from "../shared/format";
 
 export default function HistoryPage({
   jobs,
   open,
   remove,
-  startNew,
 }: {
   jobs: Job[];
   open: (job: Job) => void;
   remove: (job: Job) => void;
-  startNew: () => void;
 }) {
   return (
     <>
-      <div className="page-heading">
-        <div>
-          <div className="eyebrow">
-            <span />
-            COMPARISON HISTORY
-          </div>
-          <h1>比較履歴</h1>
-          <p>
-            このアカウントで比較した書類を、もう一度確認できます。
-          </p>
-        </div>
-        <button className="primary-button" onClick={startNew}>
-          <Plus size={16} />
-          新しい比較
-        </button>
-      </div>
-      <div className="history-card">
-        <div className="recent-heading">
-          <h2>
-            すべての比較{" "}
-            <span className="count-badge">{jobs.length}</span>
-          </h2>
-          <span className="muted">24時間で自動削除</span>
-        </div>
-        {jobs.length ? (
-          <JobList jobs={jobs} open={open} remove={remove} />
-        ) : (
-          <div className="empty-state">
-            <FolderClock size={38} />
-            <h3>まだ比較履歴がありません</h3>
-            <p>
-              PDFをアップロードするか、サンプルで体験してみましょう。
-            </p>
-            <button className="primary-button" onClick={startNew}>
-              PDFを比較
-              <ArrowRight size={16} />
-            </button>
-          </div>
-        )}
-      </div>
+      <h1>比較履歴</h1>
+      <p className="muted">比較データは24時間後に自動削除されます。</p>
+      {jobs.length ? (
+        <table>
+          <thead>
+            <tr>
+              <th>ファイル</th>
+              <th>日時</th>
+              <th>状態</th>
+              <th>差分</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {jobs.map((j) => (
+              <tr key={j.id}>
+                <td>
+                  {j.originalName} → {j.revisedName}
+                </td>
+                <td>{dateLabel(j.createdAt)}</td>
+                <td>{statusLabels[j.status]}</td>
+                <td>
+                  {j.status === "COMPLETED" ? `${j.changeCount}件` : "—"}
+                </td>
+                <td>
+                  <button onClick={() => open(j)}>開く</button>{" "}
+                  <button
+                    aria-label={`${j.originalName}の比較を削除`}
+                    disabled={isActive(j)}
+                    onClick={() => remove(j)}
+                  >
+                    削除
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="muted">まだ比較履歴がありません</p>
+      )}
     </>
   );
 }

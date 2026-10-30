@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
-import { CircleHelp, X } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import { signOut } from "../auth/api";
 import { validatePdf } from "../comparison/api";
-import ComparisonSettingsModal from "../comparison/ComparisonSettingsModal";
 import { useJobs } from "../comparison/jobsStore";
 import NewComparisonPage from "../comparison/NewComparisonPage";
 import type {
@@ -20,8 +18,7 @@ import CancelJobModal from "../jobs/CancelJobModal";
 import JobsPage from "../jobs/JobsPage";
 import ResultView from "../result/ResultView";
 import type { Account } from "../shared/api";
-import Sidebar from "./Sidebar";
-import Topbar from "./Topbar";
+import Header from "./Header";
 
 export type View = "new" | "jobs" | "history" | "help";
 
@@ -42,9 +39,18 @@ export default function Workspace({ user }: { user: Account }) {
       error,
     })),
   );
-  const { connect, refresh, start, openJob, closeJob, remove, retry, cancel, setError, reset } =
-    useJobs.getState();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const {
+    connect,
+    refresh,
+    start,
+    openJob,
+    closeJob,
+    remove,
+    retry,
+    cancel,
+    setError,
+    reset,
+  } = useJobs.getState();
   const [deleteTarget, setDeleteTarget] = useState<Job | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Job | null>(null);
   const [signingOut, setSigningOut] = useState(false);
@@ -133,102 +139,61 @@ export default function Workspace({ user }: { user: Account }) {
   }
 
   return (
-    <div className="app-shell">
-      <Sidebar
+    <>
+      <Header
         user={user}
         view={view}
-        jobCount={jobs.length}
         activeCount={jobs.filter(isActive).length}
         navigate={navigate}
-        openSettings={() => setSettingsOpen(true)}
+        signingOut={signingOut}
+        busy={signingOut || loading}
+        logout={() => void logout()}
       />
-      <div className="main-shell">
-        <Topbar
-          view={view}
-          viewingJob={job !== null}
-          connected={connected}
-          busy={signingOut || loading}
-          logout={() => void logout()}
-          openHelp={() => navigate("help")}
-        />
-        <main
-          className={
-            job?.status === "COMPLETED"
-              ? "main-content result-main"
-              : "main-content"
-          }
-        >
-          {error && (
-            <div className="error-banner" role="alert">
-              <CircleHelp size={18} />
-              <span>{error}</span>
-              {!connected && (
-                <button onClick={() => void connect()}>
-                  再接続
-                </button>
-              )}
-              <button
-                className="icon-button"
-                onClick={() => setError("")}
-                aria-label="通知を閉じる"
-              >
-                <X size={16} />
-              </button>
-            </div>
-          )}
-          {view === "new" && !job && (
-            <NewComparisonPage
-              files={files}
-              setFiles={setFiles}
-              choose={choose}
-              options={options}
-              setOptions={setOptions}
-              loading={loading}
-              start={() => void startComparison()}
-              demo={() => void startComparison(true)}
-              openSettings={() => setSettingsOpen(true)}
-              recentJobs={jobs.slice(0, 3)}
-              openJob={open}
-              removeJob={setDeleteTarget}
-              showHistory={() => navigate("history")}
-            />
-          )}
-          {(view === "new" || view === "jobs") &&
-            job &&
-            (job.status === "COMPLETED" && job.result ? (
-              <ResultView job={job} back={closeJob} backLabel={backLabel} />
-            ) : (
-              <ProcessingView job={job} back={closeJob} backLabel={backLabel} />
-            ))}
-          {view === "jobs" && !job && (
-            <JobsPage
-              jobs={jobs}
-              open={open}
-              retry={retry}
-              cancel={setCancelTarget}
-              startNew={() => navigate("new")}
-            />
-          )}
-          {view === "history" && (
-            <HistoryPage
-              jobs={jobs}
-              open={open}
-              remove={setDeleteTarget}
-              startNew={() => navigate("new")}
-            />
-          )}
-          {view === "help" && (
-            <HelpPage
-              start={() => navigate("new")}
-              demo={() => void startComparison(true)}
-            />
-          )}
-        </main>
-      </div>
-      {signingOut && <div className="modal-backdrop" role="status"><div className="modal">ログアウト中…</div></div>}
-      {settingsOpen && (
-        <ComparisonSettingsModal close={() => setSettingsOpen(false)} />
-      )}
+      <main className={job?.status === "COMPLETED" ? "main wide" : "main"}>
+        {error && (
+          <div className="error" role="alert">
+            <span>{error}</span>
+            {!connected && (
+              <button onClick={() => void connect()}>再接続</button>
+            )}
+            <button onClick={() => setError("")} aria-label="通知を閉じる">
+              ×
+            </button>
+          </div>
+        )}
+        {view === "new" && !job && (
+          <NewComparisonPage
+            files={files}
+            setFiles={setFiles}
+            choose={choose}
+            options={options}
+            setOptions={setOptions}
+            loading={loading}
+            start={() => void startComparison()}
+          />
+        )}
+        {(view === "new" || view === "jobs") &&
+          job &&
+          (job.status === "COMPLETED" && job.result ? (
+            <ResultView job={job} back={closeJob} backLabel={backLabel} />
+          ) : (
+            <ProcessingView job={job} back={closeJob} backLabel={backLabel} />
+          ))}
+        {view === "jobs" && !job && (
+          <JobsPage
+            jobs={jobs}
+            open={open}
+            retry={retry}
+            cancel={setCancelTarget}
+          />
+        )}
+        {view === "history" && (
+          <HistoryPage jobs={jobs} open={open} remove={setDeleteTarget} />
+        )}
+        {view === "help" && (
+          <HelpPage demo={() => void startComparison(true)} />
+        )}
+      </main>
       {cancelTarget && (
         <CancelJobModal
           job={cancelTarget}
@@ -243,6 +208,6 @@ export default function Workspace({ user }: { user: Account }) {
           confirm={() => void confirmRemove()}
         />
       )}
-    </div>
+    </>
   );
 }

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { LoaderCircle, LockKeyhole } from "lucide-react";
 import { authenticate } from "./api";
 
 export type AuthMode = "sign-in" | "sign-up";
@@ -58,19 +57,17 @@ export default function AuthForm({ mode, changeMode, busy, setBusy, disabled = f
             value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
         </>}
       </fieldset>
-      {error && <div className="auth-error" role="alert">{error}</div>}
-      <div className="auth-privacy"><LockKeyhole size={14} /> 比較した書類は、あなたのアカウントだけで確認できます。</div>
-      <button className="primary-button full-width" type="submit" disabled={busy || disabled}>
-        {busy && <LoaderCircle size={16} className="spin" />}
+      {error && <p className="error-text" role="alert">{error}</p>}
+      <button className="primary" type="submit" disabled={busy || disabled}>
         {busy ? "処理中…" : registering ? "アカウントを作成" : "ログイン"}
       </button>
-      <button className="auth-switch" type="button" disabled={busy} onClick={() => {
+      <button className="link" type="button" disabled={busy} onClick={() => {
         setError("");
         setPassword("");
         setConfirmation("");
         changeMode(registering ? "sign-in" : "sign-up");
       }}>
-        {registering ? "登録済みの方はこちら：ログイン" : "アカウントをお持ちでない方：新規登録"}
+        {registering ? "ログインに戻る" : "新規登録"}
       </button>
     </form>
   );

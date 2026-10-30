@@ -18,7 +18,7 @@ const jobs = [
 const noop = () => {};
 const render = (list: Job[], filter?: Parameters<typeof JobsPage>[0]["initialFilter"]) =>
   renderToStaticMarkup(
-    <JobsPage jobs={list} initialFilter={filter} open={noop} retry={async () => {}} cancel={noop} startNew={noop} />,
+    <JobsPage jobs={list} initialFilter={filter} open={noop} retry={async () => {}} cancel={noop} />,
   );
 const occurrences = (html: string, text: string) => html.split(text).length - 1;
 
