@@ -2,6 +2,7 @@ package jp.sabun.web;
 
 import java.io.IOException;
 import java.util.Map;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.*;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.*;
@@ -28,6 +29,7 @@ class ApiErrors {
 
     @ExceptionHandler(IOException.class)
     ResponseEntity<?> pdf(IOException e) {
+        LoggerFactory.getLogger(getClass()).warn("api.pdf_rejected reason={}", e.toString());
         return ResponseEntity.badRequest()
                 .body(Map.of("message", "PDFを読み込めませんでした。パスワード保護・ページ数（最大60）・ファイルの破損をご確認ください。"));
     }

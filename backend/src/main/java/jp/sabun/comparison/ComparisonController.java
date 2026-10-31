@@ -3,6 +3,7 @@ package jp.sabun.comparison;
 import jp.sabun.auth.WorkspaceIdentity;
 import jp.sabun.storage.FileStorage;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.LoggerFactory;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
@@ -124,7 +125,10 @@ class ComparisonController {
         job.normalizeWidth = width;
         job.createdAt = Instant.now();
         job.updatedAt = job.createdAt;
-        return jobs.save(job);
+        var saved = jobs.save(job);
+        LoggerFactory.getLogger(getClass()).info("job.created jobId={} mode={} originalBytes={} revisedBytes={}",
+                id, mode, as, bs);
+        return saved;
     }
 
     private static String safeName(String name) {

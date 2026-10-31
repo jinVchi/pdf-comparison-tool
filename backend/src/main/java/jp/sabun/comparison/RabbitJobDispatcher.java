@@ -33,7 +33,7 @@ class RabbitJobDispatcher {
             try {
                 rabbit.convertAndSend(QueueConfiguration.QUEUE, job.id.toString());
             } catch (Exception e) {
-                org.slf4j.LoggerFactory.getLogger(getClass()).warn("Queue unavailable; job {} will retry", job.id);
+                org.slf4j.LoggerFactory.getLogger(getClass()).warn("job.dispatch_failed jobId={} reason={}; will retry", job.id, e.toString());
             }
         }
     }

@@ -3,9 +3,12 @@ package jp.sabun.comparison;
 import jp.sabun.auth.WorkspaceIdentity;
 import jp.sabun.storage.FileStorage;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
@@ -25,6 +28,7 @@ import static org.assertj.core.api.Assertions.*;
         "spring.datasource.username=sa", "spring.datasource.password=", "app.queue=false",
         "app.storage=target/test-files", "spring.rabbitmq.listener.simple.auto-startup=false" })
 @AutoConfigureMockMvc
+@ExtendWith(OutputCaptureExtension.class)
 class ComparisonApiTest {
     @Autowired
     MockMvc mvc;
@@ -192,5 +196,57 @@ class ComparisonApiTest {
         assertThat(jobs.claim(job.id, Instant.now())).isEqualTo(1);
         assertThat(jobs.claim(job.id, Instant.now())).isZero();
         jobs.deleteById(job.id);
+    }
+
+    private String logLine(CapturedOutput output, String event) {
+        return output.getOut().lines().filter(line -> line.contains(event)).findFirst().orElse("");
+    }
+
+    private ComparisonJob.Status awaitFinished(UUID id) throws InterruptedException {
+        for (int i = 0; i < 120; i++) {
+            var status = jobs.findById(id).orElseThrow().status;
+            if (status == ComparisonJob.Status.COMPLETED || status == ComparisonJob.Status.FAILED)
+                return status;
+            Thread.sleep(250);
+        }
+        throw new AssertionError("Job " + id + " did not finish");
+    }
+
+    @Test
+    void jobLifecycleIsLoggedWithTheJobIdAndDuration(CapturedOutput output) throws Exception {
+        var accountId = UUID.randomUUID();
+        String body = mvc.perform(post("/api/comparisons/demo").session(account(accountId)).with(csrf()))
+                .andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString();
+        var id = UUID.fromString(com.jayway.jsonpath.JsonPath.read(body, "$.id"));
+        assertThat(awaitFinished(id)).isEqualTo(ComparisonJob.Status.COMPLETED);
+        assertThat(logLine(output, "job.created")).contains(id.toString()).contains("mode=mixed");
+        assertThat(logLine(output, "job.started")).contains(id.toString());
+        assertThat(logLine(output, "job.completed")).contains(id.toString()).contains("pages=2")
+                .containsPattern("changes=\\d+").containsPattern("durationMs=\\d+");
+        jobs.deleteById(id);
+        files.delete(id);
+    }
+
+    @Test
+    void unreadablePdfsAreRejectedAndLoggedWithTheCause(CapturedOutput output) throws Exception {
+        byte[] corrupt = "%PDF-1.7 truncated".getBytes();
+        mvc.perform(multipart("/api/comparisons")
+                .file(new MockMultipartFile("original", "a.pdf", "application/pdf", corrupt))
+                .file(new MockMultipartFile("revised", "b.pdf", "application/pdf", corrupt))
+                .session(account(UUID.randomUUID())).with(csrf())).andExpect(status().isBadRequest());
+        assertThat(logLine(output, "api.pdf_rejected")).contains("WARN").contains("reason=");
+    }
+
+    @Test
+    void failedJobsAreLoggedAsErrorsWithTheCause(CapturedOutput output) throws Exception {
+        var job = saved(UUID.randomUUID(), ComparisonJob.Status.QUEUED);
+        storeUploads(job.id);
+        job.dispatchedAt = null;
+        jobs.saveAndFlush(job);
+        assertThat(awaitFinished(job.id)).isEqualTo(ComparisonJob.Status.FAILED);
+        assertThat(logLine(output, "job.failed")).contains("ERROR").contains(job.id.toString())
+                .containsPattern("durationMs=\\d+");
+        jobs.deleteById(job.id);
+        files.delete(job.id);
     }
 }

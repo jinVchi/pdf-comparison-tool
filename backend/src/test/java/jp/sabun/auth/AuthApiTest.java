@@ -7,9 +7,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.mock.web.MockMultipartFile;
@@ -17,6 +20,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import static org.assertj.core.api.Assertions.*;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -24,6 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.username=sa", "spring.datasource.password=", "app.queue=false",
         "app.storage=target/auth-test-files", "spring.rabbitmq.listener.simple.auto-startup=false" })
 @AutoConfigureMockMvc
+@ExtendWith(OutputCaptureExtension.class)
 class AuthApiTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
@@ -44,8 +49,13 @@ class AuthApiTest {
 
     private ResultActions auth(String endpoint, MockHttpSession session, String token, String email, String password)
             throws Exception {
+        return authFrom(UUID.randomUUID().toString(), endpoint, session, token, email, password);
+    }
+
+    private ResultActions authFrom(String address, String endpoint, MockHttpSession session, String token,
+            String email, String password) throws Exception {
         return mvc.perform(post("/api/auth/" + endpoint).session(session)
-                .with(request -> { request.setRemoteAddr(UUID.randomUUID().toString()); return request; })
+                .with(request -> { request.setRemoteAddr(address); return request; })
                 .header("X-CSRF-TOKEN", token).contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(Map.of("email", email, "password", password))));
     }
@@ -243,5 +253,50 @@ class AuthApiTest {
         assertThat(ComparisonJobFixtures.progress(jobs, stale.id)).isEqualTo(50);
         mvc.perform(get("/api/comparisons/" + stale.id).session(guest)).andExpect(status().isOk());
         jobs.deleteById(stale.id);
+    }
+
+    @Test
+    void authenticationEventsAreLoggedWithoutPasswordsOrFullEmails(CapturedOutput output) throws Exception {
+        String email = email();
+        var first = new MockHttpSession();
+        register(first, email);
+        var user = users.findByEmail(email).orElseThrow();
+        mvc.perform(post("/api/auth/sign-out").session(first)
+                .header("X-CSRF-TOKEN", session(first).get("csrfToken").asText())).andExpect(status().isNoContent());
+        var second = new MockHttpSession();
+        auth("sign-in", second, session(second).get("csrfToken").asText(), email, "wrong-password-123")
+                .andExpect(status().isUnauthorized());
+        assertThat(output).contains("auth.sign_up outcome=success userId=" + user.id)
+                .contains("auth.sign_out userId=" + user.id)
+                .contains("auth.sign_in outcome=failure status=401 email=u***@example.com")
+                .doesNotContain(PASSWORD).doesNotContain("wrong-password-123").doesNotContain(email);
+    }
+
+    @Test
+    void rateLimitedAttemptsAreLoggedWithTheClientAddress(CapturedOutput output) throws Exception {
+        String address = "rate-" + UUID.randomUUID();
+        var guest = new MockHttpSession();
+        String token = session(guest).get("csrfToken").asText();
+        for (int i = 0; i < 5; i++)
+            authFrom(address, "sign-up", guest, token, "invalid", PASSWORD).andExpect(status().isBadRequest());
+        authFrom(address, "sign-up", guest, token, "invalid", PASSWORD).andExpect(status().isTooManyRequests());
+        assertThat(output).contains("auth.sign_up outcome=rate_limited ip=" + address);
+    }
+
+    @Test
+    void requestIdsAreEchoedAndAttachedToLogLines(CapturedOutput output) throws Exception {
+        var guest = new MockHttpSession();
+        mvc.perform(post("/api/auth/sign-in").session(guest)
+                .header("X-CSRF-TOKEN", session(guest).get("csrfToken").asText()).header("X-Request-Id", "trace-abc-123")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("email", email(), "password", PASSWORD))))
+                .andExpect(status().isUnauthorized()).andExpect(header().string("X-Request-Id", "trace-abc-123"));
+        assertThat(output.getOut().lines().filter(line -> line.contains("auth.sign_in")).findFirst().orElse(""))
+                .contains("trace-abc-123");
+        String generated = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+        mvc.perform(get("/api/health")).andExpect(header().string("X-Request-Id", matchesPattern(generated)));
+        // Untrusted ids that could forge log lines are replaced.
+        mvc.perform(get("/api/health").header("X-Request-Id", "forged\nline"))
+                .andExpect(header().string("X-Request-Id", matchesPattern(generated)));
     }
 }

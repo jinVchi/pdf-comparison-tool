@@ -27,6 +27,7 @@ class JobMaintenance {
             job.errorMessage = "処理が中断されました。もう一度比較してください。";
             job.updatedAt = Instant.now();
             jobs.save(job);
+            org.slf4j.LoggerFactory.getLogger(getClass()).warn("job.timed_out jobId={}", job.id);
         }
         for (var job : jobs.findByCreatedAtBeforeAndStatusIn(Instant.now().minusSeconds(retention * 3600L),
                 List.of(ComparisonJob.Status.COMPLETED, ComparisonJob.Status.FAILED))) {
@@ -34,7 +35,7 @@ class JobMaintenance {
                 files.delete(job.id);
                 jobs.delete(job);
             } catch (Exception e) {
-                org.slf4j.LoggerFactory.getLogger(getClass()).warn("Could not expire {}", job.id);
+                org.slf4j.LoggerFactory.getLogger(getClass()).warn("job.expire_failed jobId={}", job.id, e);
             }
         }
     }

@@ -30,6 +30,10 @@ PostgreSQL, RabbitMQ, and PDF storage use persistent Docker volumes. Stopping co
 
 Development database and RabbitMQ credentials are `sabun` / `sabun-local`. These defaults are for local use. Ports bind only to loopback.
 
+### Logs
+
+In Docker the API writes ECS JSON to stdout; local runs use plain text. Each container keeps at most 5 × 10 MB of logs. Nginx assigns every request an id, logs it as `requestId=…`, and passes it to the API as `X-Request-Id`; API log lines carry the same `requestId`, and lines from a comparison worker carry `jobId`. Event messages start with a stable name such as `auth.sign_in`, `job.completed`, or `api.pdf_rejected`. Passwords are never logged, and failed sign-ins log only a masked email.
+
 ## Develop locally
 
 Requires Node.js 22.12+ (Node 24 recommended), JDK 21+, Maven 3.9+, and Docker Desktop.

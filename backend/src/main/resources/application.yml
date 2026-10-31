@@ -10,6 +10,8 @@ server:
   error:
     include-message: never
 spring:
+  application:
+    name: sabun-api
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/sabun}
     username: ${DATABASE_USER:sabun}
@@ -46,5 +48,8 @@ app:
     command: ${TESSERACT_COMMAND:tesseract}
     timeout-seconds: 45
 logging:
+  # Docker sets LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs for JSON; local runs stay plain text.
+  pattern:
+    correlation: "[%X{requestId:-} %X{jobId:-}] "
   level:
     org.apache.pdfbox: ERROR
